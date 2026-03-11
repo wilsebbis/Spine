@@ -1,0 +1,79 @@
+import Foundation
+import SwiftData
+
+/// User preferences and onboarding state.
+/// Persisted in SwiftData to survive reinstalls (CloudKit-backed in future).
+enum ReadingGoal: Int, Codable, CaseIterable, Sendable {
+    case fiveMinutes = 5
+    case tenMinutes = 10
+    case fifteenMinutes = 15
+    
+    var displayLabel: String {
+        "\(rawValue) min/day"
+    }
+    
+    var description: String {
+        switch self {
+        case .fiveMinutes: return "A gentle start"
+        case .tenMinutes: return "The sweet spot"
+        case .fifteenMinutes: return "Deep reader"
+        }
+    }
+}
+
+enum ReaderTheme: String, Codable, CaseIterable, Sendable {
+    case light
+    case sepia
+    case dark
+    
+    var displayName: String {
+        rawValue.capitalized
+    }
+}
+
+@Model
+final class UserSettings {
+    @Attribute(.unique) var id: UUID
+    
+    // MARK: - Onboarding
+    var hasCompletedOnboarding: Bool
+    var readingGoalRaw: Int
+    
+    // MARK: - Reader Preferences
+    var readerThemeRaw: String
+    var fontSize: Double
+    var lineHeightMultiplier: Double
+    var useSerifFont: Bool
+    
+    // MARK: - Active Book
+    var activeBookId: UUID?
+    
+    // MARK: - Reading Speed
+    var wordsPerMinute: Int
+    
+    // MARK: - Gamification
+    var dailyXPGoal: Int
+    
+    var readingGoal: ReadingGoal {
+        get { ReadingGoal(rawValue: readingGoalRaw) ?? .tenMinutes }
+        set { readingGoalRaw = newValue.rawValue }
+    }
+    
+    var readerTheme: ReaderTheme {
+        get { ReaderTheme(rawValue: readerThemeRaw) ?? .light }
+        set { readerThemeRaw = newValue.rawValue }
+    }
+    
+    init() {
+        self.id = UUID()
+        self.hasCompletedOnboarding = false
+        self.readingGoalRaw = ReadingGoal.tenMinutes.rawValue
+        self.readerThemeRaw = ReaderTheme.light.rawValue
+        self.fontSize = 18.0
+        self.lineHeightMultiplier = 1.6
+        self.useSerifFont = true
+        self.wordsPerMinute = 225
+        self.dailyXPGoal = 30
+        self.activeBookId = nil
+    }
+}
