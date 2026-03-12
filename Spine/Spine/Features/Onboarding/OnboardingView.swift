@@ -11,6 +11,7 @@ struct OnboardingView: View {
     @Query private var books: [Book]
     
     @State private var currentPage = 0
+    @State private var maxAllowedPage = 0  // Only CTA buttons advance this
     @State private var selectedGoal: ReadingGoal = .tenMinutes
     @State private var isCompleted = false
     
@@ -38,6 +39,12 @@ struct OnboardingView: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .always))
             .indexViewStyle(.page(backgroundDisplayMode: .always))
+            .onChange(of: currentPage) { oldValue, newValue in
+                // Block forward swiping past allowed page
+                if newValue > maxAllowedPage {
+                    withAnimation { currentPage = maxAllowedPage }
+                }
+            }
         }
         .onAppear {
             AnalyticsService.shared.log(.onboardingStarted)
@@ -81,7 +88,7 @@ struct OnboardingView: View {
             Spacer()
             
             Button {
-                withAnimation { currentPage = 1 }
+                withAnimation { maxAllowedPage = 1; currentPage = 1 }
             } label: {
                 Text("Get Started")
                     .font(SpineTokens.Typography.headline)
@@ -92,7 +99,7 @@ struct OnboardingView: View {
                     .clipShape(RoundedRectangle(cornerRadius: SpineTokens.Radius.medium))
             }
             .padding(.horizontal, SpineTokens.Spacing.xl)
-            .padding(.bottom, SpineTokens.Spacing.xxl)
+            .padding(.bottom, SpineTokens.Spacing.lg)
         }
     }
     
@@ -139,7 +146,7 @@ struct OnboardingView: View {
             Spacer()
             
             Button {
-                withAnimation { currentPage = 2 }
+                withAnimation { maxAllowedPage = 2; currentPage = 2 }
             } label: {
                 Text("Continue")
                     .font(SpineTokens.Typography.headline)
@@ -150,7 +157,7 @@ struct OnboardingView: View {
                     .clipShape(RoundedRectangle(cornerRadius: SpineTokens.Radius.medium))
             }
             .padding(.horizontal, SpineTokens.Spacing.xl)
-            .padding(.bottom, SpineTokens.Spacing.xxl)
+            .padding(.bottom, SpineTokens.Spacing.lg)
         }
     }
     
@@ -158,7 +165,7 @@ struct OnboardingView: View {
     
     private var tastePage: some View {
         TasteOnboardingView {
-            withAnimation { currentPage = 3 }
+            withAnimation { maxAllowedPage = 3; currentPage = 3 }
         }
     }
     
@@ -248,7 +255,7 @@ struct OnboardingView: View {
                     .clipShape(RoundedRectangle(cornerRadius: SpineTokens.Radius.medium))
             }
             .padding(.horizontal, SpineTokens.Spacing.xl)
-            .padding(.bottom, SpineTokens.Spacing.xxl)
+            .padding(.bottom, SpineTokens.Spacing.lg)
         }
     }
     

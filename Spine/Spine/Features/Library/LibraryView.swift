@@ -16,7 +16,6 @@ struct LibraryView: View {
     @State private var showingError = false
     @State private var searchText = ""
     @State private var selectedBook: Book?
-    @State private var showingReader = false
     
     private var filteredBooks: [Book] {
         if searchText.isEmpty {
@@ -46,7 +45,6 @@ struct LibraryView: View {
                             bookCard(book)
                                 .onTapGesture {
                                     selectedBook = book
-                                    showingReader = true
                                 }
                         }
                     }
@@ -84,13 +82,8 @@ struct LibraryView: View {
             } message: {
                 Text(importError ?? "Unknown error")
             }
-            .navigationDestination(isPresented: $showingReader) {
-                if let book = selectedBook {
-                    let unit = ProgressTracker(modelContext: modelContext).todaysUnit(for: book)
-                    if let unit {
-                        ReaderView(book: book, initialUnit: unit)
-                    }
-                }
+            .navigationDestination(item: $selectedBook) { book in
+                BookDetailView(book: book)
             }
         }
     }

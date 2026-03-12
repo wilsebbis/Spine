@@ -45,6 +45,9 @@ final class ReadingUnit {
     /// When this unit was completed.
     var completedAt: Date?
     
+    /// User's private notes/micro-review for this unit.
+    var privateNotes: String?
+    
     // MARK: - Relationships
     
     @Relationship(deleteRule: .cascade, inverse: \Highlight.readingUnit)

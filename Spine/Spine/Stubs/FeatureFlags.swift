@@ -14,24 +14,25 @@ struct FeatureFlags: Sendable {
     let highlights = true
     let reactions = true
     
-    // MARK: - Phase 2: Open Ecosystem + Foundational AI (OFF)
-    let arbitraryEPUBImport = false
-    let defineWord = false
-    let explainParagraph = false
-    let unitRecap = false
+    // MARK: - Phase 2: Open Ecosystem + Foundational AI (ON)
+    let arbitraryEPUBImport = true
+    let defineWord = true
+    let explainParagraph = true
+    let unitRecap = true
     let librarySync = false
     
-    // MARK: - Phase 3: Spoiler-Safe Intelligence (OFF)
-    let progressAwareRetrieval = false
-    let characterGraph = false
-    let askTheBook = false
-    let xRay = false
+    // MARK: - Phase 3: Spoiler-Safe Intelligence (ON)
+    let progressAwareRetrieval = true
+    let characterGraph = true
+    let askTheBook = true
+    let xRay = true
+    let advancedRecap = true
     
-    // MARK: - Phase 4: Social Layer (OFF)
-    let chapterGatedDiscussions = false
-    let readingClubs = false
-    let publicProfiles = false
-    let highlightSharing = false
+    // MARK: - Phase 4: Social Layer (ON)
+    let chapterGatedDiscussions = true
+    let readingClubs = true
+    let publicProfiles = true
+    let highlightSharing = true
     
     // MARK: - Utility
     

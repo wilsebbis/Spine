@@ -43,6 +43,23 @@ final class AnalyticsService: Sendable {
         case tabSelected = "tab_selected"
         case bookOpened = "book_opened"
         case readerSettingsChanged = "reader_settings_changed"
+        
+        // AI (Phase 2)
+        case wordDefined = "word_defined"
+        case paragraphExplained = "paragraph_explained"
+        case unitRecapped = "unit_recapped"
+        
+        // Intelligence (Phase 3)
+        case askTheBookUsed = "ask_the_book_used"
+        case characterGraphViewed = "character_graph_viewed"
+        case xrayOpened = "xray_opened"
+        
+        // Audio Sync
+        case audioSyncCompleted = "audio_sync_completed"
+        
+        // Social (Phase 4)
+        case discussionViewed = "discussion_viewed"
+        case highlightShared = "highlight_shared"
     }
     
     /// Log an analytics event with optional properties.

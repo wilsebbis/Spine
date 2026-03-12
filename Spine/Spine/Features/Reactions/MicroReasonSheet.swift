@@ -50,7 +50,7 @@ struct MicroReasonSheet: View {
                     .foregroundColor(SpineTokens.Colors.subtleGray)
                     .textCase(.uppercase)
                 
-                FlowLayout(spacing: SpineTokens.Spacing.xs) {
+                SpineFlowLayout(spacing: SpineTokens.Spacing.xs) {
                     ForEach(Self.likedOptions, id: \.self) { reason in
                         ChipButton(
                             label: reason,
@@ -70,7 +70,7 @@ struct MicroReasonSheet: View {
                     .foregroundColor(SpineTokens.Colors.subtleGray)
                     .textCase(.uppercase)
                 
-                FlowLayout(spacing: SpineTokens.Spacing.xs) {
+                SpineFlowLayout(spacing: SpineTokens.Spacing.xs) {
                     ForEach(Self.dislikedOptions, id: \.self) { reason in
                         ChipButton(
                             label: reason,

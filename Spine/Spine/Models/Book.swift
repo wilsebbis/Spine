@@ -45,6 +45,16 @@ final class Book {
     @Attribute(.externalStorage) var synopsisEmbedding: Data?
     var popularityScore: Double
     
+    // MARK: Book Detail Enrichment
+    var longDescription: String?
+    var themes: [String]
+    var publicationYear: Int?
+    var literaryPeriod: String?
+    var authorMetadataJSON: String?
+    
+    // MARK: Intelligence (Phase 3)
+    @Attribute(.externalStorage) var characterGraphJSON: String?
+    
     // MARK: Timestamps
     var createdAt: Date
     var updatedAt: Date
@@ -91,6 +101,26 @@ final class Book {
         readingUnits.count
     }
     
+    var estimatedHours: Double {
+        Double(totalWordCount) / 225.0 / 60.0
+    }
+    
+    var authorMetadata: AuthorMetadata? {
+        get {
+            guard let json = authorMetadataJSON,
+                  let data = json.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(AuthorMetadata.self, from: data)
+        }
+        set {
+            guard let value = newValue,
+                  let data = try? JSONEncoder().encode(value) else {
+                authorMetadataJSON = nil
+                return
+            }
+            authorMetadataJSON = String(data: data, encoding: .utf8)
+        }
+    }
+    
     init(
         title: String,
         author: String,
@@ -111,6 +141,7 @@ final class Book {
         self.importStatus = .pending
         self.genres = []
         self.vibes = []
+        self.themes = []
         self.popularityScore = 0
         self.createdAt = Date()
         self.updatedAt = Date()

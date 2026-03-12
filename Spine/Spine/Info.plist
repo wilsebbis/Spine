@@ -37,6 +37,10 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -67,6 +71,29 @@
 					<string>application/epub+zip</string>
 				</array>
 			</dict>
+		</dict>
+	</array>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.spine.app.feedback</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Send Feedback</string>
+			<key>UIApplicationShortcutItemSubtitle</key>
+			<string>Tell us what you think</string>
+			<key>UIApplicationShortcutItemIconType</key>
+			<string>UIApplicationShortcutIconTypeMail</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.spine.app.share</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Share Spine</string>
+			<key>UIApplicationShortcutItemSubtitle</key>
+			<string>Recommend to a friend</string>
+			<key>UIApplicationShortcutItemIconType</key>
+			<string>UIApplicationShortcutIconTypeShare</string>
 		</dict>
 	</array>
 </dict>

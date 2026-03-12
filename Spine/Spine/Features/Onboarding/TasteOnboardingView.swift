@@ -41,17 +41,6 @@ struct TasteOnboardingView: View {
     
     var body: some View {
         VStack(spacing: SpineTokens.Spacing.lg) {
-            // Progress indicator
-            HStack(spacing: SpineTokens.Spacing.xs) {
-                Capsule()
-                    .fill(SpineTokens.Colors.accentGold)
-                    .frame(height: 3)
-                Capsule()
-                    .fill(step == .vibes ? SpineTokens.Colors.accentGold : SpineTokens.Colors.warmStone)
-                    .frame(height: 3)
-            }
-            .padding(.horizontal, SpineTokens.Spacing.xl)
-            .padding(.top, SpineTokens.Spacing.md)
             
             switch step {
             case .genres:
@@ -97,7 +86,7 @@ struct TasteOnboardingView: View {
             }
             .padding(.horizontal, SpineTokens.Spacing.lg)
             
-            FlowLayout(spacing: SpineTokens.Spacing.xs) {
+            SpineFlowLayout(spacing: SpineTokens.Spacing.xs) {
                 ForEach(Self.genres, id: \.self) { genre in
                     ChipButton(
                         label: genre,
@@ -126,7 +115,7 @@ struct TasteOnboardingView: View {
                         .foregroundColor(SpineTokens.Colors.subtleGray)
                 }
                 
-                FlowLayout(spacing: SpineTokens.Spacing.xs) {
+                SpineFlowLayout(spacing: SpineTokens.Spacing.xs) {
                     ForEach(Self.positiveVibes, id: \.self) { vibe in
                         ChipButton(
                             label: vibe,
@@ -154,7 +143,7 @@ struct TasteOnboardingView: View {
                 }
                 
                 if showAvoidedSection {
-                    FlowLayout(spacing: SpineTokens.Spacing.xs) {
+                    SpineFlowLayout(spacing: SpineTokens.Spacing.xs) {
                         ForEach(Self.negativeVibes, id: \.self) { vibe in
                             ChipButton(
                                 label: vibe,
@@ -298,7 +287,7 @@ struct ChipButton: View {
 // MARK: - Flow Layout
 // Wrapping horizontal layout for chips.
 
-struct FlowLayout: Layout {
+struct SpineFlowLayout: Layout {
     var spacing: CGFloat = 8
     
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

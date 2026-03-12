@@ -43,7 +43,7 @@ struct ReactionSheet: View {
                             .font(SpineTokens.Typography.headline)
                             .foregroundStyle(SpineTokens.Colors.espresso)
                         
-                        FlowLayout(spacing: SpineTokens.Spacing.xs) {
+                        SpineFlowLayout(spacing: SpineTokens.Spacing.xs) {
                             ForEach(ReactionType.allCases, id: \.self) { reaction in
                                 reactionChip(reaction)
                             }
@@ -80,6 +80,48 @@ struct ReactionSheet: View {
                         }
                         
                         if showQuoteField {
+                            // Show existing highlights to pick from
+                            let highlights = book.sortedUnits.flatMap { $0.highlights }
+                            
+                            if !highlights.isEmpty {
+                                Text("Pick from your highlights:")
+                                    .font(SpineTokens.Typography.caption2)
+                                    .foregroundStyle(SpineTokens.Colors.subtleGray)
+                                
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: SpineTokens.Spacing.xs) {
+                                        ForEach(highlights, id: \.id) { hl in
+                                            Button {
+                                                favoriteQuote = hl.selectedText
+                                            } label: {
+                                                Text("\"\(hl.selectedText.prefix(60))\(hl.selectedText.count > 60 ? "…" : "")\"")
+                                                    .font(SpineTokens.Typography.caption2)
+                                                    .foregroundStyle(
+                                                        favoriteQuote == hl.selectedText
+                                                            ? .white
+                                                            : SpineTokens.Colors.espresso
+                                                    )
+                                                    .lineLimit(2)
+                                                    .padding(.horizontal, SpineTokens.Spacing.sm)
+                                                    .padding(.vertical, SpineTokens.Spacing.xs)
+                                                    .frame(maxWidth: 200)
+                                                    .background(
+                                                        favoriteQuote == hl.selectedText
+                                                            ? SpineTokens.Colors.accentGold
+                                                            : Color(UIColor(hex: hl.colorHex) ?? .systemYellow).opacity(0.25)
+                                                    )
+                                                    .clipShape(RoundedRectangle(cornerRadius: SpineTokens.Radius.small))
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                Text("Or type your own:")
+                                    .font(SpineTokens.Typography.caption2)
+                                    .foregroundStyle(SpineTokens.Colors.subtleGray)
+                                    .padding(.top, SpineTokens.Spacing.xxs)
+                            }
+                            
                             TextField("Paste or type a quote…", text: $favoriteQuote, axis: .vertical)
                                 .font(SpineTokens.Typography.readerSerif(size: 14))
                                 .lineLimit(2...6)

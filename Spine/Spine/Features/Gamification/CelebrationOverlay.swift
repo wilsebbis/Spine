@@ -15,20 +15,35 @@ struct CelebrationOverlay: View {
     
     var body: some View {
         ZStack {
-            // Dimmed background
-            Color.black.opacity(0.6)
-                .ignoresSafeArea()
-                .onTapGesture { onDismiss() }
+            // Soft pink background
+            LinearGradient(
+                colors: [
+                    Color(red: 0.98, green: 0.88, blue: 0.91),  // soft blush
+                    Color(red: 0.95, green: 0.82, blue: 0.87),  // warm rose
+                    Color(red: 0.92, green: 0.78, blue: 0.85),  // dusty pink
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
             
-            // Confetti layer
-            ForEach(particles) { particle in
-                Circle()
-                    .fill(particle.color)
-                    .frame(width: particle.size, height: particle.size)
-                    .offset(x: particle.x, y: showConfetti ? particle.endY : particle.startY)
-                    .rotationEffect(.degrees(showConfetti ? particle.rotation : 0))
-                    .opacity(showConfetti ? 0 : 1)
+            // Confetti layer (GPU-composited)
+            Canvas { context, size in
+                for particle in particles {
+                    let progress = showConfetti ? 1.0 : 0.0
+                    let y = particle.startY + (particle.endY - particle.startY) * progress
+                    let opacity = showConfetti ? 0.0 : 1.0
+                    let rect = CGRect(
+                        x: size.width / 2 + particle.x - particle.size / 2,
+                        y: y - particle.size / 2,
+                        width: particle.size,
+                        height: particle.size
+                    )
+                    context.opacity = opacity
+                    context.fill(Circle().path(in: rect), with: .color(particle.color))
+                }
             }
+            .allowsHitTesting(false)
             
             // Content
             VStack(spacing: SpineTokens.Spacing.xl) {
@@ -53,7 +68,7 @@ struct CelebrationOverlay: View {
                     ForEach(reward.breakdownLines, id: \.self) { line in
                         Text(line)
                             .font(SpineTokens.Typography.caption)
-                            .foregroundColor(.white.opacity(0.8))
+                            .foregroundColor(SpineTokens.Colors.subtleGray)
                     }
                 }
                 .scaleEffect(showContent ? 1.0 : 0.3)
@@ -87,11 +102,6 @@ struct CelebrationOverlay: View {
             
             // Animate XP counter
             animateCounter()
-            
-            // Auto-dismiss after 5 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                onDismiss()
-            }
         }
     }
     
@@ -111,7 +121,6 @@ struct CelebrationOverlay: View {
                         )
                     )
                     .frame(width: 160, height: 160)
-                    .blur(radius: 10)
                 
                 Circle()
                     .fill(
@@ -133,7 +142,7 @@ struct CelebrationOverlay: View {
             
             Text("LEVEL UP!")
                 .font(.system(size: 28, weight: .black, design: .rounded))
-                .foregroundColor(.white)
+                .foregroundColor(SpineTokens.Colors.espresso)
                 .tracking(4)
             
             Text(XPLevelTable.title(for: reward.newLevel))
@@ -160,7 +169,7 @@ struct CelebrationOverlay: View {
                 
                 Text("Achievement Unlocked!")
                     .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+                    .foregroundColor(SpineTokens.Colors.espresso)
                 
                 Text(first.name)
                     .font(SpineTokens.Typography.title)
@@ -168,7 +177,7 @@ struct CelebrationOverlay: View {
                 
                 Text(first.description)
                     .font(SpineTokens.Typography.callout)
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(SpineTokens.Colors.subtleGray)
             }
         }
     }
@@ -185,7 +194,7 @@ struct CelebrationOverlay: View {
             .yellow,
         ]
         
-        particles = (0..<60).map { i in
+        particles = (0..<25).map { i in
             ConfettiParticle(
                 id: i,
                 x: CGFloat.random(in: -200...200),

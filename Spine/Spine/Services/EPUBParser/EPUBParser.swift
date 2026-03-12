@@ -292,7 +292,7 @@ private enum OPFParser {
         var spineRefs: [String]
     }
     
-    static func parseOPF(data: Data) -> (EPUBMetadata, [String: ManifestItem], [String]) {
+    nonisolated static func parseOPF(data: Data) -> (EPUBMetadata, [String: ManifestItem], [String]) {
         let xml = String(data: data, encoding: .utf8) ?? ""
         var metadata = EPUBMetadata()
         var manifest: [String: ManifestItem] = [:]
@@ -375,7 +375,7 @@ private enum OPFParser {
 // MARK: - NCX String Parser (no NSObject)
 
 private enum NCXStringParser {
-    static func parse(xml: String) -> [TOCEntry] {
+    nonisolated static func parse(xml: String) -> [TOCEntry] {
         var entries: [TOCEntry] = []
         
         // Extract navPoints with their content - using start position pattern
@@ -442,7 +442,7 @@ private enum NCXStringParser {
 // MARK: - Nav Document String Parser (no NSObject)
 
 private enum NavStringParser {
-    static func parse(xml: String) -> [TOCEntry] {
+    nonisolated static func parse(xml: String) -> [TOCEntry] {
         var entries: [TOCEntry] = []
         
         // Find the nav[epub:type="toc"] section

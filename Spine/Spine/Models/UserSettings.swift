@@ -45,6 +45,16 @@ final class UserSettings {
     var lineHeightMultiplier: Double
     var useSerifFont: Bool
     
+    // MARK: - Typography Extras
+    var marginSize: Double          // horizontal padding (16–48pt)
+    var paragraphSpacing: Double    // multiplier for inter-paragraph gap (0.4–1.0)
+    var useDyslexiaFont: Bool       // OpenDyslexic-style accessible font
+    
+    // MARK: - Line Guide / Reading Ruler
+    var lineGuideEnabled: Bool
+    var lineGuideBandHeight: Int    // 1 = 1 line, 2 = 2 lines, 3 = 3 lines
+    var lineGuideDimAmount: Double  // 0.3–0.8 opacity of dimmed area
+    
     // MARK: - Active Book
     var activeBookId: UUID?
     
@@ -72,6 +82,12 @@ final class UserSettings {
         self.fontSize = 18.0
         self.lineHeightMultiplier = 1.6
         self.useSerifFont = true
+        self.marginSize = 24.0
+        self.paragraphSpacing = 0.6
+        self.useDyslexiaFont = false
+        self.lineGuideEnabled = false
+        self.lineGuideBandHeight = 2
+        self.lineGuideDimAmount = 0.5
         self.wordsPerMinute = 225
         self.dailyXPGoal = 30
         self.activeBookId = nil

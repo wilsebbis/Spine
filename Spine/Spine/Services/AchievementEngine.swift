@@ -25,7 +25,7 @@ struct AchievementEngine: Sendable {
     
     static let all: [Achievement] = [
         // Milestones
-        Achievement(id: "first_unit", name: "First Steps", icon: "footprints", description: "Complete your first reading unit", category: .milestone),
+        Achievement(id: "first_unit", name: "First Steps", icon: "figure.walk", description: "Complete your first reading unit", category: .milestone),
         Achievement(id: "units_10", name: "Getting Started", icon: "figure.walk", description: "Complete 10 reading units", category: .milestone),
         Achievement(id: "units_50", name: "Dedicated", icon: "figure.run", description: "Complete 50 reading units", category: .milestone),
         Achievement(id: "units_100", name: "Centurion", icon: "medal", description: "Complete 100 reading units", category: .milestone),
@@ -40,8 +40,8 @@ struct AchievementEngine: Sendable {
         
         // Skills
         Achievement(id: "speed_200", name: "Swift Reader", icon: "hare", description: "Read at 200+ WPM", category: .skill),
-        Achievement(id: "speed_300", name: "Speed Demon", icon: "gauge.with.dots.needle.33percent", description: "Read at 300+ WPM", category: .skill),
-        Achievement(id: "xp_100", name: "Century", icon: "100.circle.fill", description: "Earn 100 XP in one day", category: .skill),
+        Achievement(id: "speed_300", name: "Speed Demon", icon: "speedometer", description: "Read at 300+ WPM", category: .skill),
+        Achievement(id: "xp_100", name: "Century", icon: "star.circle.fill", description: "Earn 100 XP in one day", category: .skill),
         Achievement(id: "consistent_7", name: "Rock Solid", icon: "diamond.fill", description: "Hit daily goal 7 days straight", category: .skill),
         
         // Lifestyle
