@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import NaturalLanguage
 import FoundationModels
 
@@ -12,6 +13,7 @@ import FoundationModels
 struct CodexView: View {
     @Environment(\.dismiss) private var dismiss
     
+    @Environment(\.modelContext) private var modelContext
     let book: Book
     let currentUnitOrdinal: Int
     
@@ -123,10 +125,9 @@ struct CodexView: View {
             }
         }
         .task {
-            // Start loading entities and story concurrently
-            async let entitiesTask: () = buildCodex()
+            // Cache-first: read precomputed intelligence (instant)
+            loadCachedEntities()
             loadStory()
-            await entitiesTask
         }
     }
     
@@ -442,7 +443,45 @@ struct CodexView: View {
     
     // MARK: - Data Loading
     
-    private func buildCodex() async {
+    /// Load entities from precomputed BookIntelligence cache (milliseconds).
+    /// Falls back to live NER only if cache is empty.
+    private func loadCachedEntities() {
+        if let intelligence = book.intelligence, intelligence.passACompleted {
+            // Read from cache — instant
+            let cached = BookIntelligenceService.loadEntities(from: intelligence)
+            
+            // Filter to spoiler ceiling and convert to CodexEntity
+            entities = cached
+                .filter { $0.firstAppearanceUnit <= currentUnitOrdinal }
+                .map { cached in
+                    CodexEntity(
+                        name: cached.name,
+                        type: CodexEntityType(rawValue: cached.type.rawValue) ?? .person,
+                        mentionCount: cached.mentionCount,
+                        firstAppearanceUnit: cached.firstAppearanceUnit,
+                        firstContext: cached.firstContext,
+                        unitAppearances: cached.unitAppearances.filter { $0 <= currentUnitOrdinal }
+                    )
+                }
+                .sorted { $0.mentionCount > $1.mentionCount }
+            
+            isLoadingEntities = false
+            
+            AnalyticsService.shared.log(.xrayOpened, properties: [
+                "bookTitle": book.title,
+                "entityCount": String(entities.count),
+                "source": "cache"
+            ])
+        } else {
+            // Fallback: live NER (first open before intelligence is ready)
+            Task {
+                await buildCodexLive()
+            }
+        }
+    }
+    
+    /// Fallback live NER — only used if BookIntelligence cache isn't ready yet.
+    private func buildCodexLive() async {
         let readUnits = book.sortedUnits.filter { $0.ordinal <= currentUnitOrdinal }
         var entityMap: [String: CodexEntity] = [:]
         
@@ -503,6 +542,30 @@ struct CodexView: View {
         entities = entityMap.values
             .sorted { $0.mentionCount > $1.mentionCount }
         isLoadingEntities = false
+        
+        // Cache results for future opens — create BookIntelligence lazily for existing books
+        if book.intelligence == nil {
+            let intel = BookIntelligence(book: book, contentHash: "legacy-\(book.id.uuidString)")
+            intel.passACompleted = true
+            modelContext.insert(intel)
+            book.intelligence = intel
+        }
+        if let intel = book.intelligence {
+            let cached = entities.map { entity in
+                CachedEntity(
+                    name: entity.name,
+                    type: CachedEntityType(rawValue: entity.type.rawValue) ?? .person,
+                    mentionCount: entity.mentionCount,
+                    firstAppearanceUnit: entity.firstAppearanceUnit,
+                    firstContext: entity.firstContext,
+                    unitAppearances: entity.unitAppearances
+                )
+            }
+            if let json = try? JSONEncoder().encode(cached),
+               let jsonStr = String(data: json, encoding: .utf8) {
+                intel.entitiesJSON = jsonStr
+            }
+        }
         
         AnalyticsService.shared.log(.xrayOpened, properties: [
             "bookTitle": book.title,

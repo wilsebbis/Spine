@@ -13,6 +13,7 @@ xcuserdata/
 .AppleDouble
 .LSOverride
 ._*
+**/.DS_Store
 
 # Swift Package Manager
 .build/
@@ -49,3 +50,14 @@ playground.xcworkspace
 .gemini/
 .agent/
 .agents/
+.antigravityignore
+
+# Python — scraping tooling (not part of the iOS app)
+*.pyc
+__pycache__/
+.scraper_venv/
+*.egg-info/
+
+# Scraping scripts (development tools, not shipped)
+scrape_gutenberg.py
+check_librivox.py

@@ -212,7 +212,7 @@ struct OnboardingView: View {
                     .font(SpineTokens.Typography.largeTitle)
                     .foregroundStyle(SpineTokens.Colors.espresso)
                 
-                Text("Import a classic from Project Gutenberg, or browse your Library to begin.")
+                Text("Pick a reading path and we'll guide you through your first classic — one short lesson at a time.")
                     .font(SpineTokens.Typography.body)
                     .foregroundStyle(SpineTokens.Colors.subtleGray)
                     .multilineTextAlignment(.center)
@@ -222,7 +222,7 @@ struct OnboardingView: View {
             // Show seeded books
             if !books.isEmpty {
                 VStack(spacing: SpineTokens.Spacing.xs) {
-                    Text("Starter Library")
+                    Text("Your Starter Library")
                         .font(SpineTokens.Typography.caption2)
                         .foregroundStyle(SpineTokens.Colors.subtleGray)
                     
@@ -243,16 +243,26 @@ struct OnboardingView: View {
             
             Spacer()
             
-            Button {
-                completeOnboarding()
-            } label: {
-                Text("Start Reading")
-                    .font(SpineTokens.Typography.headline)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, SpineTokens.Spacing.sm)
-                    .background(SpineTokens.Colors.espresso)
-                    .clipShape(RoundedRectangle(cornerRadius: SpineTokens.Radius.medium))
+            VStack(spacing: SpineTokens.Spacing.sm) {
+                Button {
+                    completeOnboarding()
+                } label: {
+                    Label("Pick Your First Path", systemImage: "map.fill")
+                        .font(SpineTokens.Typography.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, SpineTokens.Spacing.sm)
+                        .background(SpineTokens.Colors.espresso)
+                        .clipShape(RoundedRectangle(cornerRadius: SpineTokens.Radius.medium))
+                }
+                
+                Button {
+                    completeOnboarding()
+                } label: {
+                    Text("Skip to Library")
+                        .font(SpineTokens.Typography.caption)
+                        .foregroundStyle(SpineTokens.Colors.subtleGray)
+                }
             }
             .padding(.horizontal, SpineTokens.Spacing.xl)
             .padding(.bottom, SpineTokens.Spacing.lg)

@@ -34,6 +34,15 @@ struct SpineApp: App {
             ReadingClub.self,
             BookChatMessage.self,
             LocalDiscussionPost.self,
+            BookIntelligence.self,
+            ReadingPath.self,
+            VocabularyWord.self,
+            League.self,
+            StreakShield.self,
+            Season.self,
+            BuddyChallenge.self,
+            AudiobookChapter.self,
+            BookAudioFile.self,
         ])
         
         let config = ModelConfiguration(
@@ -123,6 +132,9 @@ struct ContentView: View {
         }
         SeedCatalog.seedIfNeeded(modelContext: modelContext)
         SeedCatalog.enrichExistingBooks(modelContext: modelContext)
+        
+        // Pre-fetch cover thumbnails from Gutenberg in background
+        CoverCacheService(modelContext: modelContext).prefetchCovers()
     }
 }
 
@@ -287,21 +299,27 @@ struct MainTabView: View {
                 LibraryView()
             }
             
-            Tab("Highlights", systemImage: "highlighter", value: 2) {
-                HighlightsView()
+            Tab("Discover", systemImage: "sparkle.magnifyingglass", value: 2) {
+                NavigationStack {
+                    CatalogView()
+                }
             }
             
-            Tab("Social", systemImage: "person.2.fill", value: 3) {
+            Tab("Paths", systemImage: "map.fill", value: 3) {
+                PathsView()
+            }
+            
+            Tab("Social", systemImage: "person.2.fill", value: 4) {
                 ReadingClubView()
             }
             
-            Tab("Profile", systemImage: "person.fill", value: 4) {
+            Tab("Profile", systemImage: "person.fill", value: 5) {
                 ProfileView()
             }
         }
         .tint(SpineTokens.Colors.accentGold)
         .onChange(of: selectedTab) { _, newValue in
-            let tabNames = ["Today", "Library", "Highlights", "Social", "Profile"]
+            let tabNames = ["Today", "Library", "Discover", "Paths", "Social", "Profile"]
             AnalyticsService.shared.log(.tabSelected, properties: [
                 "tab": tabNames[min(newValue, tabNames.count - 1)]
             ])

@@ -1,7 +1,5 @@
 @preconcurrency import Foundation
-#if canImport(ZIPFoundation)
-import ZIPFoundation
-#endif
+import Compression
 
 // MARK: - EPUB Parser
 // Handles the complete pipeline: unzip → parse OPF → parse TOC → load spine content.
@@ -113,18 +111,9 @@ final class EPUBParser: Sendable {
         
         try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
         
-        #if canImport(ZIPFoundation)
-        do {
-            try fm.unzipItem(at: url, to: tempDir)
-        } catch {
-            throw ParseError.unzipFailed(error.localizedDescription)
-        }
+        let zipData = try Data(contentsOf: url)
+        try MiniZIP.extract(zipData, to: tempDir, fileManager: fm)
         return tempDir
-        #else
-        throw ParseError.unzipFailed(
-            "ZIPFoundation is not linked. Add via File → Add Package Dependencies → https://github.com/weichsel/ZIPFoundation.git"
-        )
-        #endif
     }
     
     // MARK: - Container.xml

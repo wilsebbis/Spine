@@ -16,7 +16,7 @@
 | **AI Layer** | Apple Foundation Models (fully on-device, no API keys, no network) |
 | **CloudKit** | Container `iCloud.com.spine.app` — used **only** for social features via `CloudKitSocialService`. No SwiftData models sync to CloudKit. |
 | **Xcode** | 26+ (iOS 26 SDK) |
-| **Dependencies** | Zero external — pure Apple frameworks (SwiftUI, SwiftData, FoundationModels, NaturalLanguage, CloudKit) |
+| **Dependencies** | Zero external — pure Apple frameworks (SwiftUI, SwiftData, FoundationModels, NaturalLanguage, CloudKit, Speech, AVFoundation) |
 
 ---
 
@@ -34,17 +34,112 @@ Spine/
 │   └── Extensions.swift
 ├── Features/
 │   ├── Gamification/
+│   │   ├── AchievementGallery.swift
+│   │   ├── CelebrationOverlay.swift
+│   │   ├── XPProgressBar.swift
+│   │   └── XPToast.swift
 │   ├── Highlights/
+│   │   └── HighlightsView.swift
 │   ├── Library/
+│   │   ├── AddPhysicalBookView.swift     ← NEW (physical book entry)
+│   │   ├── CatalogView.swift
+│   │   ├── ForYouView.swift
+│   │   ├── LibraryView.swift
+│   │   └── PhysicalBookTrackerView.swift ← NEW (chapter grid + XP)
 │   ├── Onboarding/
+│   │   ├── OnboardingView.swift
+│   │   └── TasteOnboardingView.swift
+│   ├── Paths/
+│   │   ├── PathDetailView.swift
+│   │   └── PathsView.swift
+│   ├── Premium/
+│   │   └── PaywallView.swift
 │   ├── Profile/
+│   │   ├── ProfileView.swift
+│   │   └── SettingsView.swift
 │   ├── Reactions/
+│   │   ├── MicroReasonSheet.swift
+│   │   └── ReactionSheet.swift
 │   ├── Reader/
+│   │   ├── AskTheBookView.swift
+│   │   ├── AudioImportSheet.swift
+│   │   ├── AudioMiniPlayerView.swift
+│   │   ├── AudiobookPlayerView.swift
+│   │   ├── CodexView.swift
+│   │   ├── DefineWordSheet.swift
+│   │   ├── ExplainParagraphSheet.swift
+│   │   ├── KaraokeTextView.swift          ← NEW (word-level highlighting)
+│   │   ├── ReaderView.swift
+│   │   └── SelectableTextView.swift
 │   ├── Social/
-│   └── Today/
+│   │   ├── DiscussionView.swift
+│   │   ├── PublicProfileView.swift
+│   │   ├── ReadingClubView.swift
+│   │   ├── ReferralView.swift
+│   │   └── ShareHighlightSheet.swift
+│   ├── Today/
+│   │   └── TodayView.swift
+│   └── Vocabulary/
+│       ├── ReviewSessionView.swift
+│       └── VocabularyDeckView.swift
 ├── Models/
+│   ├── AudiobookChapter.swift
+│   ├── AudioSyncModels.swift              ← NEW (TimedWord, TimedPhrase, ChapterTimings)
+│   ├── AuthorMetadata.swift
+│   ├── Book.swift
+│   ├── BookIntelligence.swift
+│   ├── BookInteraction.swift
+│   ├── Chapter.swift
+│   ├── DailySession.swift
+│   ├── Highlight.swift
+│   ├── League.swift
+│   ├── QuoteSave.swift
+│   ├── Reaction.swift
+│   ├── ReadingClub.swift
+│   ├── ReadingPath.swift
+│   ├── ReadingProgress.swift
+│   ├── ReadingRecap.swift
+│   ├── ReadingUnit.swift
+│   ├── Season.swift
+│   ├── UserSettings.swift
+│   ├── UserTasteProfile.swift
+│   ├── VocabularyWord.swift
+│   └── XPProfile.swift
 ├── Services/
-│   └── EPUBParser/
+│   ├── AchievementEngine.swift
+│   ├── AnalyticsService.swift
+│   ├── AudioBoilerplateGater.swift        ← NEW (boilerplate detection)
+│   ├── AudioPlaybackEngine.swift
+│   ├── AudioSyncService.swift
+│   ├── AudiobookAlignmentService.swift    ← NEW (alignment orchestrator)
+│   ├── AudiobookDownloadService.swift
+│   ├── BookIntelligenceService.swift
+│   ├── BookMemoryIndex.swift
+│   ├── BookRAGService.swift
+│   ├── BookRAGServiceV2.swift
+│   ├── BookRetrievalTools.swift
+│   ├── BundledLibraryScanner.swift
+│   ├── CharacterTracker.swift
+│   ├── CloudKitSocialService.swift
+│   ├── CoverCacheService.swift
+│   ├── DownloadService.swift
+│   ├── EmbeddingService.swift
+│   ├── EPUBParser/
+│   │   ├── ContentNormalizer.swift
+│   │   ├── EPUBModels.swift
+│   │   ├── EPUBParser.swift
+│   │   └── MiniZIP.swift
+│   ├── FoundationModelService.swift
+│   ├── IngestionPipeline.swift
+│   ├── LibriVoxService.swift
+│   ├── PremiumManager.swift
+│   ├── ProgressTracker.swift
+│   ├── RecommendationService.swift
+│   ├── SegmentationEngine.swift
+│   ├── StreakCalculator.swift
+│   ├── TextBlockClassifier.swift          ← NEW (ebook content classification)
+│   ├── WordAlignmentEngine.swift          ← NEW (Smith-Waterman alignment)
+│   └── XPEngine.swift
 ├── SeedData/
 │   └── SeedCatalog.swift
 ├── Stubs/
@@ -55,44 +150,61 @@ Spine/
 
 ---
 
-## 3. Data Model (SwiftData)
+## 3. Format-Agnostic Book Sources
 
-### 3.1 Entity Relationship Diagram
+Spine tracks three book source types — all earn XP and build streaks:
+
+| Source Type | How Ingested | Progress Tracking | Completion Unit |
+|------------|-------------|-------------------|-----------------|
+| `gutenberg` | Downloaded from Project Gutenberg catalog, parsed by `EPUBParser` | Per-ReadingUnit (5–10 min segments) | `ReadingUnit.isCompleted` |
+| `local` | Imported via Files picker, parsed by `EPUBParser` | Per-ReadingUnit | `ReadingUnit.isCompleted` |
+| `physical` | Manually added (title, author, chapter count) | Per-chapter tap-to-complete | `physicalCurrentChapter / totalPhysicalChapters` |
+
+Physical books use `Book.isPhysicalBook` computed property (`sourceType == .physical`). They are marked `isDownloaded = true` and `importStatus = .completed` immediately via the convenience initializer, so they appear in the library without any parsing pipeline.
+
+---
+
+## 4. Data Model (SwiftData)
+
+### 4.1 Entity Relationship Diagram
 
 ```mermaid
 erDiagram
-    Book ||--o{ Chapter : "chapters (cascade, inverse: Chapter.book)"
-    Book ||--o{ ReadingUnit : "readingUnits (cascade, inverse: ReadingUnit.book)"
-    Book ||--o| ReadingProgress : "readingProgress (cascade, inverse: ReadingProgress.book)"
-    Book ||--o{ Highlight : "highlights (cascade, inverse: Highlight.book)"
-    Book ||--o{ DailySession : "dailySessions (cascade, inverse: DailySession.book)"
-    Book ||--o{ Reaction : "reactions (cascade, inverse: Reaction.book)"
-    Book ||--o{ QuoteSave : "quoteSaves (cascade, inverse: QuoteSave.book)"
-    Book ||--o{ BookInteraction : "interactions (cascade, inverse: BookInteraction.book)"
-    Chapter ||--o{ ReadingUnit : "readingUnits (cascade, inverse: ReadingUnit.chapter)"
-    ReadingUnit ||--o{ Highlight : "highlights (cascade, inverse: Highlight.readingUnit)"
-    ReadingUnit ||--o{ Reaction : "reactions (cascade, inverse: Reaction.readingUnit)"
+    Book ||--o{ Chapter : "chapters (cascade)"
+    Book ||--o{ ReadingUnit : "readingUnits (cascade)"
+    Book ||--o| ReadingProgress : "readingProgress (cascade)"
+    Book ||--o{ Highlight : "highlights (cascade)"
+    Book ||--o{ DailySession : "dailySessions (cascade)"
+    Book ||--o{ Reaction : "reactions (cascade)"
+    Book ||--o{ QuoteSave : "quoteSaves (cascade)"
+    Book ||--o{ BookInteraction : "interactions (cascade)"
+    Book ||--o{ AudiobookChapter : "audiobookChapters (cascade)"
+    Chapter ||--o{ ReadingUnit : "readingUnits (cascade)"
+    ReadingUnit ||--o{ Highlight : "highlights (cascade)"
+    ReadingUnit ||--o{ Reaction : "reactions (cascade)"
 ```
 
 > [!IMPORTANT]
 > **Ordering**: `Book.sortedUnits` and `Book.sortedChapters` are **computed properties** that sort on `.ordinal`. SwiftData relationship arrays are **unordered**. All ordered access goes through these computed getters.
 
-### 3.2 Terminology
+### 4.2 Terminology
 
 | Term | Definition | Scope |
 |------|-----------|-------|
 | **Chapter** | Structural unit from the EPUB spine. 1:1 with EPUB `<spine>` entries. | Parser output |
-| **ReadingUnit** | Consumption unit — a ~5–10 minute reading segment (~1500–3000 words). Generated by `SegmentationEngine` from chapters. | App-facing |
-| **Unit Summary** | 2-sentence summary generated from **one ReadingUnit's plainText** | V2 RAG |
-| **Chapter Summary** | 1-sentence condensation generated from a **unit summary** (NOT from Chapter.plainText) | V2 RAG |
-| **Arc Summary** | 1-paragraph synthesis generated from **3 consecutive chapter summaries** (every 3 units) | V2 RAG |
+| **ReadingUnit** | Consumption unit — a ~5–10 minute reading segment (~1500–3000 words). Generated by `SegmentationEngine` from chapters. | App-facing (EPUB books) |
+| **Physical Chapter** | User-declared chapter count for a paper book. Tracked via `totalPhysicalChapters` / `physicalCurrentChapter`. | App-facing (physical books) |
+| **AudiobookChapter** | One audio file (MP3) from a LibriVox/uploaded audiobook, with optional alignment data. | Audio pipeline |
+| **Unit Summary** | 2-sentence summary generated from one ReadingUnit's plainText | V2 RAG |
+| **Chapter Summary** | 1-sentence condensation generated from a unit summary | V2 RAG |
+| **Arc Summary** | 1-paragraph synthesis generated from 3 consecutive chapter summaries | V2 RAG |
 
 > [!CAUTION]
 > In the current implementation, "chapter summaries" are keyed by **unit ordinal**, not by Chapter.ordinal. This is because a Chapter may have multiple ReadingUnits. The label "chapter summary" refers to a condensed version of a unit summary — it does not aggregate all units within a Chapter. A future refactor should consider true per-Chapter summaries.
 
 ---
 
-## 4. AI Layer — Service Hierarchy
+## 5. AI Layer — Service Hierarchy
 
 > [!IMPORTANT]
 > **Canonical call paths** — an implementer must build exactly these three services and their boundaries.
@@ -127,21 +239,22 @@ graph TD
 
 ---
 
-## 5. Ingestion Pipeline
+## 6. Ingestion Pipeline
 
 **File**: `IngestionPipeline.swift` — `@MainActor final class`
 
 **Flow**: EPUB file → Copy to `Documents/EPUBs/` → Parse → Create Book + Chapters → Segment → Create ReadingUnits → Create ReadingProgress → Embed synopsis → Save
 
-### 5.1 EPUB Parser (`EPUBParser/`)
+### 6.1 EPUB Parser (`EPUBParser/`)
 
 | File | Lines | Role |
 |------|-------|------|
 | `EPUBParser.swift` | ~520 | Unzip → `container.xml` → `content.opf` → metadata + spine + manifest → per-chapter HTML+plainText extraction. Cover image extraction. |
 | `ContentNormalizer.swift` | ~240 | Strip scripts/styles/non-content. Normalize whitespace/encoding. Clean HTML for rendering. |
 | `EPUBModels.swift` | ~40 | `ParsedEPUB`, `ParsedChapter`, `EPUBMetadata` value types |
+| `MiniZIP.swift` | — | Lightweight unzip utility |
 
-### 5.2 Segmentation Engine (`SegmentationEngine.swift`)
+### 6.2 Segmentation Engine (`SegmentationEngine.swift`)
 
 **Config**: `minWords: 1500, maxWords: 3000, targetWords: 2250, wordsPerMinute: 225`
 
@@ -168,11 +281,201 @@ for each chapter:
 
 ---
 
-## 6. Recommendation Engine
+## 7. Audiobook System
+
+### 7.1 Audiobook Discovery & Download
+
+**Service**: `LibriVoxService.swift` — searches LibriVox RSS feeds for matching audiobooks by title/author.
+
+**Service**: `AudiobookDownloadService.swift` — per-book download state machine:
+- States: `.notAvailable`, `.notDownloaded`, `.downloading(progress)`, `.downloaded`
+- Downloads chapter MP3s to `Documents/Audiobooks/{bookId}/`
+- Creates `AudiobookChapter` SwiftData models per downloaded file
+
+**Service**: `AudioPlaybackEngine.swift` — AVFoundation-based audio player:
+- Chapter sequencing via `onTrackFinished` → auto-advances
+- Position save/resume per chapter
+- ±15s skip, play/pause, playback rate control
+
+### 7.2 EPUB ↔ Audiobook Cross-Linking
+
+The `ReaderView` headphones button auto-detects whether `book.hasAudiobook`:
+- **If audiobook downloaded**: loads chapter MP3s directly, shows `AudioMiniPlayerView`
+- **If audiobook available in Discover but not downloaded**: allows download from within reader
+- **From AudiobookPlayerView**: book icon in top bar navigates to EPUB if available
+
+### 7.3 Audio Mini Player (`AudioMiniPlayerView.swift`)
+
+Compact bottom bar: chapter title, play/pause, ±15s skip, progress line. Tap bar → expand to full `AudiobookPlayerView`. Dismiss button saves position and stops playback.
+
+### 7.4 Audiobook Alignment Pipeline
+
+Multi-stage pipeline that synchronizes audiobook audio with EPUB text for word-level highlighting:
+
+```mermaid
+graph LR
+    A[EPUB Text] --> B[TextBlockClassifier]
+    C[Audio MP3] --> D[Speech ASR]
+    D --> E[AudioBoilerplateGater]
+    B --> F[AudiobookAlignmentService]
+    E --> F
+    F --> G[WordAlignmentEngine]
+    G --> H[ChapterTimings stored in AudiobookChapter]
+```
+
+#### TextBlockClassifier (`TextBlockClassifier.swift`)
+
+Classifies EPUB text blocks into categories:
+
+| BlockKind | Purpose |
+|-----------|---------|
+| `boilerplate_discard` | LibriVox credits, Project Gutenberg legal, volunteer notes |
+| `front_matter_optional` | Preface, foreword, dedication |
+| `toc_discard` | Table of contents |
+| `chapter_heading_metadata` | Chapter titles, section headers |
+| `body_text_keep` | Canonical reading text — target for alignment |
+| `footnote_optional` | Footnotes, endnotes |
+| `back_matter_optional` | Appendices, afterword |
+
+Rule-based classification using keyword scoring and pattern matching. Heading metadata extraction and main body start detection.
+
+#### AudioBoilerplateGater (`AudioBoilerplateGater.swift`)
+
+Classifies ASR transcript chunks to distinguish book content from non-book speech:
+- LibriVox disclaimers ("this is a librivox recording")
+- Chapter announcements ("chapter one", "section two")
+- Credits ("read by", "recording by")
+- End-of-file markers ("end of chapter")
+
+Uses keyword scoring and Jaccard similarity. Outputs skip ranges for non-book speech.
+
+#### WordAlignmentEngine (`WordAlignmentEngine.swift`)
+
+Smith-Waterman local alignment on normalized word sequences:
+- **Input**: normalized EPUB word tokens + ASR transcript word tokens with timestamps
+- **Output**: `[TimedWord]` — each EPUB word mapped to audio start/end times
+- Match/mismatch/gap scoring for fuzzy alignment
+- Handles narrator ad-libs, pauses, and text variations
+
+#### AudiobookAlignmentService (`AudiobookAlignmentService.swift`)
+
+Orchestrates the full pipeline per chapter:
+1. Maps audiobook chapters to EPUB chapters (ordinal matching)
+2. Classifies EPUB text via `TextBlockClassifier` → extracts `body_text_keep` blocks
+3. Runs on-device ASR via Speech framework (iOS 26+)
+4. Gates boilerplate via `AudioBoilerplateGater`
+5. Aligns clean audio transcript to clean EPUB text via `WordAlignmentEngine`
+6. Stores resulting `ChapterTimings` in `AudiobookChapter.timingsData`
+
+### 7.5 Audio Sync Models (`AudioSyncModels.swift`)
+
+```swift
+struct TimedWord: Codable, Sendable {
+    let text: String
+    let startTime: TimeInterval
+    let endTime: TimeInterval
+    let confidence: Float       // 0.0–1.0
+}
+
+struct TimedPhrase: Codable, Sendable {
+    let words: [TimedWord]
+    let startTime: TimeInterval
+    let endTime: TimeInterval
+}
+
+struct ChapterTimings: Codable, Sendable {
+    let words: [TimedWord]
+    let phrases: [TimedPhrase]
+    
+    func activeWordIndex(at time: TimeInterval) -> Int?
+    func phraseContaining(wordIndex: Int) -> Int?
+}
+```
+
+### 7.6 Karaoke Text View (`KaraokeTextView.swift`)
+
+Word-level highlighted text overlay in `ReaderView`:
+- Three visual states per word: `.spoken` (past), `.current` (highlighted), `.upcoming` (dimmed)
+- Uses `AttributedString` for per-word styling
+- Auto-scrolls to keep current word visible
+- Tap-to-seek: tapping a word seeks `AudioPlaybackEngine` to that word's `startTime`
+- Appears as overlay when `showMiniPlayer == true` and `currentChapterTimings != nil`
+- Dismissible header shows alignment status (transcribing/aligning progress)
+
+---
+
+## 8. Physical Book Tracking
+
+### 8.1 Model Extensions (`Book.swift`)
+
+Physical books use four additional fields:
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `totalPhysicalChapters` | `Int` | User-declared chapter count |
+| `physicalCurrentChapter` | `Int` | Chapters completed so far |
+| `userRating` | `Int?` | 1–5 star rating |
+| `userNotes` | `String?` | Free-form reading notes |
+
+Computed properties:
+- `isPhysicalBook: Bool` — `sourceType == .physical`
+- `physicalProgress: Double` — `physicalCurrentChapter / totalPhysicalChapters`
+
+Convenience init: `Book(title:author:totalChapters:bookDescription:coverImageData:)` → sets `sourceType = .physical`, `isDownloaded = true`, `importStatus = .completed`.
+
+### 8.2 XP for Physical Books (`XPEngine.awardPhysicalChapterXP`)
+
+| Component | Value | Condition |
+|-----------|-------|-----------|
+| Base XP | `20` | Per chapter (slightly less than digital — no WPM verification) |
+| Streak Bonus | `+3 × currentStreak` | Capped at `+30` |
+| First of Day | `+10` | If `profile.dailyXPDate < today` |
+| Book Finish | `+150` | If `physicalCurrentChapter >= totalPhysicalChapters` |
+| Speed Bonus | `0` | N/A — can't measure WPM for paper books |
+
+### 8.3 Progress Tracking (`ProgressTracker.completePhysicalChapter`)
+
+1. Guard: `isPhysicalBook && physicalCurrentChapter < totalPhysicalChapters`
+2. Advance `physicalCurrentChapter += 1`
+3. Create `DailySession` (so streak calculator sees today's activity)
+4. Create/update `ReadingProgress` with `completedUnitCount`, `completedPercent`, `lastReadAt`
+5. Recalculate streak via `StreakCalculator`
+6. Save + analytics
+
+### 8.4 AddPhysicalBookView (`AddPhysicalBookView.swift`)
+
+Sheet for adding paper books:
+- Title (required) + Author fields
+- Chapter count stepper with +/- buttons and quick presets (10, 20, 30, 50)
+- Optional cover photo via `PhotosPicker`
+- Optional notes/description
+
+### 8.5 PhysicalBookTrackerView (`PhysicalBookTrackerView.swift`)
+
+Full tracking view:
+- **Header**: Cover image, title, author, "Physical Book" badge, completion checkmark
+- **Progress ring**: Animated circular progress with percentage + streak display
+- **Chapter grid**: `LazyVGrid` showing all chapters as 44×44 cells — completed (gold checkmark), current (outlined), upcoming (dimmed number)
+- **Complete button**: Gold CTA: "Complete Chapter N" with "+20 XP" subtitle → calls `completePhysicalChapter` + `awardPhysicalChapterXP` → shows `XPToast`
+- **Rating**: 5-star tappable rating — tap same star to clear
+- **Notes**: Editable text area with Save/Edit toggle
+
+### 8.6 Library Integration (`LibraryView.swift`)
+
+- **Query**: `isDownloaded == true || hasAudiobook == true` (physical books have `isDownloaded = true`)
+- **Segments**: Added `physicalBooks = "Physical"` to `LibrarySegment` enum
+- **Toolbar**: "+" button is now a `Menu` with "Import EPUB" and "Add Physical Book"
+- **Physical Books section**: Grid of physical book cards with gradient covers, progress badges (e.g. "3/20"), and tap-to-navigate to `PhysicalBookTrackerView`
+- **Navigation**: `selectedBook` destination checks `book.isPhysicalBook` — routes to `PhysicalBookTrackerView` instead of `BookDetailView`
+- **Cross-segment visibility**: Physical books appear in "All", "Continue" (if in progress), and "Completed" segments
+
+---
+
+## 9. Recommendation Engine
 
 **File**: `RecommendationService.swift` — `struct RecommendationService: Sendable`
 
-### 6.1 Scoring Formula
+### 9.1 Scoring Formula
 
 ```
 score = 0.30 × genreMatch
@@ -183,7 +486,7 @@ score = 0.30 × genreMatch
       − 0.40 × avoidedVibePenalty
 ```
 
-### 6.2 Signal Computation (exact)
+### 9.2 Signal Computation (exact)
 
 **genreMatch**:
 ```swift
@@ -206,15 +509,15 @@ return profile.preferredGenres.isEmpty ? 0 : totalWeight / Double(profile.prefer
 
 **noveltyBonus**: `1.0 - (sameGenreCount / totalCandidates)` where `sameGenreCount` = number of candidates sharing the candidate's primary genre. `totalCandidates` = candidates.count. If `totalCandidates == 0`, returns 0.
 
-### 6.3 Exclusion
+### 9.3 Exclusion
 
 Books excluded if user has `BookInteraction` with `.finished` or `.dismissed` for that book.
 
-### 6.4 Output
+### 9.4 Output
 
 Returns `[ScoredBook]` — `(book: Book, score: Double, rationale: String)`.
 
-### 6.5 Taste Profile Evolution
+### 9.5 Taste Profile Evolution
 
 | Method | Effect |
 |--------|--------|
@@ -223,7 +526,7 @@ Returns `[ScoredBook]` — `(book: Book, score: Double, rationale: String)`.
 
 ---
 
-## 7. Embedding Service
+## 10. Embedding Service
 
 **File**: `EmbeddingService.swift` — `struct EmbeddingService: Sendable`
 
@@ -236,7 +539,7 @@ Returns `[ScoredBook]` — `(book: Book, score: Double, rationale: String)`.
 
 ---
 
-## 8. BookRAGService V1
+## 11. BookRAGService V1
 
 **File**: `BookRAGService.swift` — `struct BookRAGService: Sendable`
 
@@ -246,9 +549,9 @@ Returns `[ScoredBook]` — `(book: Book, score: Double, rationale: String)`.
 
 ---
 
-## 9. Advanced RAG System (V2)
+## 12. Advanced RAG System (V2)
 
-### 9.1 BookMemoryIndex (`BookMemoryIndex.swift`)
+### 12.1 BookMemoryIndex (`BookMemoryIndex.swift`)
 
 **Class**: `final class BookMemoryIndex: @unchecked Sendable`
 
@@ -292,7 +595,7 @@ return min(1.0, count / words.count × 10.0)
 - `addChapterSummary(_:forUnit:)` → adds `.chapterSummary` entry, keys to `chapterSummaries[ordinal]`
 - `addArcSummary(_:startUnit:endUnit:)` → adds `.arcSummary` entry, keys to `arcSummaries[startUnit]`
 
-### 9.2 BookRAGServiceV2 (`BookRAGServiceV2.swift`)
+### 12.2 BookRAGServiceV2 (`BookRAGServiceV2.swift`)
 
 **Class**: `final class BookRAGServiceV2: @unchecked Sendable`
 
@@ -315,15 +618,7 @@ while arcStart + arcSize - 1 <= currentOrdinal:
     arcStart += arcSize
 ```
 
-**`summarize(text:bookTitle:prompt:)`** — private, separate `LanguageModelSession` per call:
-```
-if !FoundationModelService.isAvailable: return nil
-truncate to 1500 words
-try session.respond(to:) → return response.content
-catch: log warning → return nil  // handles safety guardrails gracefully
-```
-
-### 9.3 Three-Stage Retrieval (`assembleMemoryPack`)
+### 12.3 Three-Stage Retrieval (`assembleMemoryPack`)
 
 **Stage 1 — Per-tier budget selection** (`retrievePerTier`):
 
@@ -333,23 +628,12 @@ catch: log warning → return nil  // handles safety guardrails gracefully
 | `.storySoFar` | 2 | 3 | 2 | 3 | 0 |
 | `.character()` | 1 | 2 | 1 | 4 | 2 |
 
-Within each tier: score all candidates, take top N.
-
 **Scoring function** (`computeScore`):
 ```
 similarity = max(0, cosineSimilarity(queryEmbed, entry.embedding))
-   // 0 if either embedding is empty
-
-distance = currentUnitOrdinal - entry.unitOrdinal
-maxDist = max(1.0, currentUnitOrdinal)
 recency = exp(-2.0 × distance / maxDist)
-
-gap = abs(entry.unitOrdinal - currentUnitOrdinal)
 proximity = 1.0 if gap ≤ 2, 0.5 if gap ≤ 5, 0.1 otherwise
-
 entityOverlap = |queryEntities ∩ entry.entityMentions| / |queryEntities|
-   // 0 if either set is empty
-
 tierBoost = {arcSummary: 1.0, chapterSummary: 0.8, unitSummary: 0.6, scene: 0.3, chunk: 0.0}
 
 score = w.semantic × similarity + w.recency × recency + w.proximity × proximity
@@ -365,43 +649,17 @@ Character       0.15     0.10      0.05     0.50      0.20
 ```
 
 **Stage 2 — Diversity reranking** (`rerankWithDiversity`):
-```
-result = [], remaining = all Stage 1 entries, usedUnitCounts = {}
-while remaining not empty:
-    for each candidate in remaining:
-        unitCount = usedUnitCounts[candidate.unitOrdinal] ?? 0
-        diversityPenalty = unitCount × 0.3
-        tierBonus = candidate.tier.rawValue × 0.1
-        redundancyPenalty = 0
-        for each already-selected entry:
-            if cosineSimilarity > 0.85: redundancyPenalty += 0.5
-        score = tierBonus - diversityPenalty - redundancyPenalty
-    select max-score candidate
-    add to result, increment usedUnitCounts
-```
+- Penalizes same-unit clustering (`unitCount × 0.3`)
+- Rewards higher tiers (`tier.rawValue × 0.1`)
+- Penalizes semantic redundancy (cosine > 0.85 → `+0.5` penalty)
 
 **Stage 3 — Adjacent expansion** (`expandWithNeighbors`):
-```
-for top 2 scene/chunk entries:
-    get neighbors via memoryIndex.neighbors(of: entry.id)
-    filter: neighbor.unitOrdinal ≤ currentUnitOrdinal AND not already in result
-    add to result
-sort result by unitOrdinal (narrative order)
-```
-
-**Memory pack assembly**:
-```
-for each entry in expanded:
-    entryWords = entry.text.split(" ").count
-    if wordCount + entryWords > maxWords: skip
-    pack += "[{tier.label} — Unit {unitOrdinal + 1}]\n{entry.text}"
-    wordCount += entryWords
-return pack.joined(separator: "\n\n---\n\n")
-```
+- For top 2 scene/chunk entries: get neighbors, filter by spoiler ceiling, add to result
+- Sort by unitOrdinal (narrative order)
 
 Word budgets: Quick=600, StorySoFar=800, Character=700, Ask=700.
 
-### 9.4 @Generable Structured Output (`ReadingRecap.swift`)
+### 12.4 @Generable Structured Output (`ReadingRecap.swift`)
 
 ```swift
 @Generable(description: "A spoiler-safe reading recap")
@@ -411,29 +669,14 @@ struct ReadingRecap {
     @Guide(description: "Unresolved plot threads")      let unresolvedThreads: [String]
     @Guide(description: "Details the reader should remember") let importantDetailsToRemember: [String]
     @Guide(description: "One paragraph story recap")    let recapParagraph: String
-    @Guide(description: "Coverage note, e.g. Focused on Chapters 1-12") let coverageNote: String
+    @Guide(description: "Coverage note")                let coverageNote: String
 }
 
-@Generable(description: "Character state")
-struct CharacterUpdate {
-    @Guide(description: "Name")                     let name: String
-    @Guide(description: "Current status, 1 sentence") let status: String
-}
-
-@Generable(description: "Quick refresher bullets")
-struct QuickRefresher {
-    @Guide(description: "5-7 recent event bullets") let bullets: [String]
-}
-
-@Generable(description: "Major character statuses")
-struct CharacterRefresher {
-    @Guide(description: "Each major character's status") let characters: [CharacterUpdate]
-}
+@Generable struct QuickRefresher { let bullets: [String] }
+@Generable struct CharacterRefresher { let characters: [CharacterUpdate] }
 ```
 
-### 9.5 Tool Calling (`BookRetrievalTools.swift`)
-
-Three compact tools. All conform to `Tool` protocol. Used for **bounded follow-up only**.
+### 12.5 Tool Calling (`BookRetrievalTools.swift`)
 
 | Tool | Args | Output |
 |------|------|--------|
@@ -445,47 +688,48 @@ All tool outputs are terse strings (~50–200 chars) to conserve the 4096-token 
 
 ---
 
-## 10. Character Tracker & Codex
+## 13. Character Tracker & Codex
 
-### 10.1 CharacterTracker (`CharacterTracker.swift`)
+### 13.1 CharacterTracker (`CharacterTracker.swift`)
 
 **Struct**: `struct CharacterTracker: Sendable`
 
 **Entity extraction**: `NLTagger(tagSchemes: [.nameType])` with `.joinNames` option.
 
-**Normalization**: `name.capitalized` after `trimmingCharacters(in: .whitespacesAndNewlines)`. Names < 2 chars are skipped.
-
 Two modes:
-1. **`extractCharacters(from:upToUnit:) → [CharacterInfo]`**: All `.personalName` entities from read units. Sorted by mention count. Loads from cached `book.characterGraphJSON` first (filtered to `firstAppearanceUnit ≤ currentOrdinal`).
-2. **`extractEntities(from:) → [EntityInfo]`**: Single-unit X-Ray. Extracts `.personalName` ("person"), `.placeName` ("place"), `.organizationName` ("organization").
+1. **`extractCharacters(from:upToUnit:) → [CharacterInfo]`**: All `.personalName` entities from read units.
+2. **`extractEntities(from:) → [EntityInfo]`**: Single-unit X-Ray. Extracts `.personalName`, `.placeName`, `.organizationName`.
 
-### 10.2 CodexView
+### 13.2 CodexView
 
-Filter pills: All / Characters / Locations / Groups. Entity cards with mention counts and first appearance. Tappable detail with AI-generated description via `FoundationModelService.askTheBook`. Spoiler-safe.
+Filter pills: All / Characters / Locations / Groups. Entity cards with mention counts and first appearance. Tappable detail with AI-generated description. Spoiler-safe.
 
 ---
 
-## 11. Gamification System
+## 14. Gamification System
 
-### 11.1 XP Engine (`XPEngine.swift`)
+### 14.1 XP Engine (`XPEngine.swift`)
 
 **Struct**: `@MainActor struct XPEngine`
+
+**Digital Book XP** (`awardXP`):
 
 | Component | Value | Condition |
 |-----------|-------|-----------|
 | Base XP | `10` | Always |
-| Streak Bonus | `+2 × currentStreak` | Capped at `+20` |
+| Difficulty Bonus | `+5` | If unit wordCount > 3000 |
+| Streak Bonus | `+3 × currentStreak` | Capped at `+30` |
 | Speed Bonus | `+5` | If WPM > `profile.averageWPM` AND `averageWPM > 0` |
-| First of Day | `+5` | If `profile.dailyXPDate < today` |
-| Book Finish | `+50` | If `book.readingUnits.allSatisfy { $0.isCompleted }` |
+| First of Day | `+10` | If `profile.dailyXPDate < today` |
+| Book Finish | `+150` | If `book.readingUnits.allSatisfy { $0.isCompleted }` |
 
-**WPM calculation**: `wordCount / minutesSpent` — returns 0 if `minutesSpent < 0.1` (avoids near-zero division).
+**Physical Book XP** (`awardPhysicalChapterXP`): See §8.2.
 
-### 11.2 XP Profile (`XPProfile.swift`)
+**WPM calculation**: `wordCount / minutesSpent` — returns 0 if `minutesSpent < 0.1`.
+
+### 14.2 XP Profile (`XPProfile.swift`)
 
 **WPM tracking**: Exponential moving average — `averageWPM = 0.3 × wpm + 0.7 × averageWPM` (first session: `averageWPM = wpm`). Sanity check: `wpm > 0 && wpm < 1500`.
-
-**Consistency**: `consistencyScore = Double(dailyGoalHitsThisWeek) / 7.0`
 
 **Level thresholds** (all 15):
 
@@ -507,11 +751,9 @@ Filter pills: All / Characters / Locations / Groups. Entity cards with mention c
 | 14 | 7000 | Archive Architect |
 | 15 | 9000 | Grand Librarian |
 
-`levelProgress = (totalXP - xpForCurrentLevel) / (xpForNextLevel - xpForCurrentLevel)`
+### 14.3 Achievement Engine (`AchievementEngine.swift`)
 
-### 11.3 Achievement Engine (`AchievementEngine.swift`)
-
-16 achievements across 4 categories. Check function is `@MainActor`.
+16 achievements across 4 categories:
 
 | ID | Name | Threshold | Category |
 |----|------|-----------|----------|
@@ -532,50 +774,52 @@ Filter pills: All / Characters / Locations / Groups. Entity cards with mention c
 | `night_owl` | Night Owl | hour ≥ 22 OR hour < 4 | Lifestyle |
 | `early_bird` | First Light | 4 ≤ hour < 7 | Lifestyle |
 
-### 11.4 Streak Calculator (`StreakCalculator.swift`)
+### 14.4 Streak Calculator (`StreakCalculator.swift`)
 
 **Struct**: `struct StreakCalculator: Sendable`
 
 Algorithm:
 ```
 readingDays = Set of startOfDay(session.sessionDate) for completed sessions
-if readingDays is empty: return (0, 0, false)
-sortedDays = readingDays.sorted()
-
-currentStreak:
-    checkDate = today
-    if today in sortedDays: streak=1, check yesterday
-    else: check yesterday; if yesterday in sortedDays: streak=1, else return 0
-    while checkDate in sortedDays: streak++, checkDate -= 1 day
-
-longestStreak:
-    walk sortedDays; if consecutive day gap == 1: current++; else: current=1
-    track max
+currentStreak: walk backwards from today counting consecutive days
+longestStreak: walk forwards counting max consecutive run
 ```
 
 ---
 
-## 12. Social Layer (CloudKit)
+## 15. Social Layer (CloudKit)
 
 **File**: `CloudKitSocialService.swift` — container `iCloud.com.spine.app`
 
 | Function | CKRecord Type | Notes |
 |----------|---------------|-------|
-| `getDiscussion(bookId:unitOrdinal:)` | `DiscussionPost` | Gracefully handles missing record type (returns `[]`) |
-| `postToDiscussion(…text:)` | `DiscussionPost` | `DiscussionView` does optimistic local append after save |
+| `getDiscussion(bookId:unitOrdinal:)` | `DiscussionPost` | Gracefully handles missing record type |
+| `postToDiscussion(…text:)` | `DiscussionPost` | Optimistic local append |
 | `shareHighlight(…)` | `SharedHighlight` | |
 | `getPublicProfile(userId:)` | `PublicProfile` | |
 | Club operations | `ReadingClub` | Create, join, fetch |
 
-### 12.1 ReadingClub Persistence Boundary
+### 15.1 ReadingClub Persistence Boundary
 
-`ReadingClub` is a **local-only SwiftData model** with a `cloudKitRecordId: String?` field. It is **never auto-synced** by SwiftData. When a club is created or joined, `CloudKitSocialService` manually saves/fetches `CKRecord`s and the local SwiftData model is updated separately. The local model caches cloud state for offline access.
+`ReadingClub` is a **local-only SwiftData model** with `cloudKitRecordId: String?`. It is **never auto-synced** by SwiftData. Manual `CKRecord` operations in `CloudKitSocialService`.
 
 ---
 
-## 13. Design System (`SpineTokens`)
+## 16. Vocabulary System
 
-### 13.1 Color Palette
+### 16.1 VocabularyWord Model
+
+Saved from "Define Word" flow in reader. Stores word, definition, context sentence, book reference.
+
+### 16.2 VocabularyDeckView
+
+Flashcard-style review with spaced repetition. `ReviewSessionView` handles quiz mechanics.
+
+---
+
+## 17. Design System (`SpineTokens`)
+
+### 17.1 Color Palette
 
 | Token | Hex | Usage |
 |-------|-----|-------|
@@ -590,7 +834,7 @@ longestStreak:
 | `successGreen` | `#4CAF82` | Completion states |
 | `subtleGray` | `#8E8E93` | Secondary text |
 
-### 13.2 Reader Themes
+### 17.2 Reader Themes
 
 | Theme | Background | Text |
 |-------|-----------|------|
@@ -598,15 +842,15 @@ longestStreak:
 | `.sepia` | `#F4ECD8` | `#5B4636` |
 | `.dark` | `#1C1C1E` | `#E5E5EA` |
 
-### 13.3 Spacing Scale (in points)
+### 17.3 Spacing Scale (in points)
 
 `xxxs:2, xxs:4, xs:8, sm:12, md:16, lg:24, xl:32, xxl:48, xxxl:64`
 
 ---
 
-## 14. Reader State Machine (`ReaderView.swift`)
+## 18. Reader State Machine (`ReaderView.swift`)
 
-### 14.1 Sheet State Machine
+### 18.1 Sheet State Machine
 
 Single-sheet enum pattern — only one sheet can be active at a time:
 
@@ -620,80 +864,37 @@ enum ReaderSheet: Identifiable {
 @State private var activeSheet: ReaderSheet?
 ```
 
-Presented via single `.sheet(item: $activeSheet)`.
-
-### 14.2 Toolbar Enable Rules
-
-| Button | Icon | Condition |
-|--------|------|-----------|
-| Ask the Book | `bubble.left.and.text.bubble.right` | `FeatureFlags.shared.askTheBook` |
-| Codex | `text.book.closed` | `characterGraph ∥ xRay` |
-| Recap | `clock.badge.checkmark` | `advancedRecap` |
-| Discussion | `bubble.left.and.bubble.right.fill` | `chapterGatedDiscussions && currentUnit.isCompleted` |
-| Settings | `textformat.size` | Always |
-
-### 14.3 Unit Completion Flow
+### 18.2 Unit Completion Flow
 
 ```
 1. completeCurrentUnit() called
 2. ProgressTracker.completeUnit() marks unit + session
 3. XPEngine.awardXP() → XPReward
 4. modelContext.save()
-5. if didLevelUp || newAchievements: showCelebration = true (fullScreenCover)
-   else: showXPToast = true (overlay)
-6. if completedCount % 5 == 0: after 3s delay, if no sheet active → activeSheet = .microReason
+5. if didLevelUp || newAchievements: showCelebration = true
+   else: showXPToast = true
+6. if completedCount % 5 == 0: after 3s delay → activeSheet = .microReason
 ```
 
-**No auto-recap** — the recap button is in the toolbar for manual access.
+### 18.3 Audiobook Integration in Reader
 
-### 14.4 Text Selection Actions (via UIKit `editMenuInteraction`)
+- `@State var showMiniPlayer` — toggled by headphones button
+- `@State var currentChapterTimings: ChapterTimings?` — loaded from `AudiobookChapter.timings`
+- `@State var activeWordIndex: Int?` — current highlighted word
+- `@State var activePhraseRange: Range<Int>?` — current highlighted phrase
+- `playbackTrackingTimer` — fires at ~30Hz to update highlighting via `ChapterTimings.activeWordIndex(at:)`
+- `KaraokeTextView` overlay with dismiss header and alignment status
 
-| Action | Requires Flag | Sets |
-|--------|--------------|------|
-| Highlight | — | `highlightText` → `.highlight` sheet |
-| Share Quote | `highlightSharing` | `highlightText` → `.shareHighlight` sheet |
-| Explain | `explainParagraph` | `selectedParagraph` → `.explainParagraph` sheet |
-| Define Word | `defineWord` | `selectedWord`, `selectedParagraph` → `.defineWord` sheet |
-
-### 14.5 AI Unavailability
+### 18.4 AI Unavailability
 
 `FoundationModelService.isAvailable` checks `SystemLanguageModel.default.isAvailable`. If false:
-- `summarize()` returns nil → unit/chapter/arc summaries are skipped, memory index builds without them
-- Feature flag buttons still show (they check flags, not model availability)
+- `summarize()` returns nil → summaries skipped
+- Feature flag buttons still show
 - Runtime errors caught and displayed in view error states
 
-### 14.6 RecapView Caching & Generation
-
-- Generation starts **on appear** of the view (not on tab switch)
-- Three `@State` results cached: `quickResult`, `storyResult`, `characterResult`
-- Switching tabs checks if result is already cached; if yes, displays immediately without regeneration
-- Cache is scoped to the `RecapView` instance — dismissed and re-presented creates a new instance (cache cleared)
-- Switching books means navigating away and back, creating a new `RecapView` (cache cleared)
-- Invalidation: none beyond instance lifetime
-
 ---
 
-## 15. Feature Flags (`FeatureFlags.swift`)
-
-| Phase | Flags (all `true` = shipped) |
-|-------|-----|
-| **1: Core Habit** | `epubIngestion`, `dailySegmentation`, `streakTracking`, `highlights`, `reactions` |
-| **2: AI Foundations** | `arbitraryEPUBImport`, `defineWord`, `explainParagraph`, `unitRecap`, `librarySync` (false) |
-| **3: Intelligence** | `progressAwareRetrieval`, `characterGraph`, `askTheBook`, `xRay`, `advancedRecap` |
-| **4: Social** | `chapterGatedDiscussions`, `readingClubs`, `publicProfiles`, `highlightSharing` |
-
----
-
-## 16. Seed Data
-
-Bundled Project Gutenberg EPUBs auto-ingested on first launch via `SeedCatalog.swift`:
-- Pride and Prejudice, Wuthering Heights, Frankenstein, Romeo and Juliet, Alice's Adventures in Wonderland, The Great Gatsby
-
-Each has pre-assigned `genres` and `vibes` for immediate recommendation scoring.
-
----
-
-## 17. Tab Navigation
+## 19. Tab Navigation
 
 | Tab | View | Icon |
 |-----|------|------|
@@ -705,289 +906,92 @@ Each has pre-assigned `genres` and `vibes` for immediate recommendation scoring.
 
 ---
 
-## 18. Key Architectural Decisions
+## 20. Feature Flags (`FeatureFlags.swift`)
 
-1. **Reading Units ≠ Chapters**: Chapters are EPUB structural. ReadingUnits are consumption-sized (~5–10 min). This enables daily habits, per-unit progress, and precise spoiler ceilings.
-
-2. **Spoiler ceiling enforced at data layer**: Every AI service filters by `unitOrdinal ≤ currentUnitOrdinal`. This is enforced in `BookRAGService`, `BookRAGServiceV2`, `CharacterTracker`, and `FoundationModelService`.
-
-3. **Recap ≠ QA**: `BookRAGService` (V1) is flat-chunk semantic search for Q&A ("Who is Darcy?"). `BookRAGServiceV2` is hierarchical memory reconstruction for recap ("What happened so far?"). Different retrieval strategies, different output schemas.
-
-4. **App-driven first-pass retrieval**: V2's retrieval is controlled by the app (tier budgets, scoring weights, diversity reranking). Foundation Models tool calling is bounded to supplemental follow-up — the model cannot bypass the spoiler ceiling or waste tokens on unbounded tool calls.
-
-5. **On-device AI only**: No API keys, no network calls for AI. `SystemLanguageModel.default`. Graceful degradation if unavailable.
-
-6. **Event-driven taste profile**: `UserTasteProfile` evolves from onboarding (`setOnboardingGenres`, `setOnboardingVibes`) through ongoing `reinforceVibe` / `penalizeVibe` micro-signals.
-
-7. **Token budget management** (4096-token context window): Hierarchical summaries carry more signal per token; compact `@Generable` schemas (3–5 word `@Guide` descriptions); separate summarization sessions; terse tool outputs; hard word limits on memory packs.
+| Phase | Flags (all `true` = shipped) |
+|-------|-----|
+| **1: Core Habit** | `epubIngestion`, `dailySegmentation`, `streakTracking`, `highlights`, `reactions` |
+| **2: AI Foundations** | `arbitraryEPUBImport`, `defineWord`, `explainParagraph`, `unitRecap`, `librarySync` (false) |
+| **3: Intelligence** | `progressAwareRetrieval`, `characterGraph`, `askTheBook`, `xRay`, `advancedRecap` |
+| **4: Social** | `chapterGatedDiscussions`, `readingClubs`, `publicProfiles`, `highlightSharing` |
 
 ---
 
-## Appendix A: Storage Schema
+## 21. Analytics (`AnalyticsService.swift`)
 
-### Book
+Non-blocking, batched telemetry. Events logged locally with optional future backend:
+
+| Event | When |
+|-------|------|
+| `book_import_started` | EPUB import begins |
+| `book_import_completed` | EPUB parsed + segmented (also used for physical book adds) |
+| `book_import_failed` | Parse/segment error |
+| `book_opened` | User opens a book |
+| `reading_unit_completed` | Unit finished (digital or physical chapter) |
+| `achievement_unlocked` | New achievement earned |
+| `highlight_created` | Text highlighted |
+| `reaction_added` | Reaction selected |
+| `discussion_posted` | Social post |
+| `audiobook_download_started` | Audiobook download begins |
+
+---
+
+## 22. Key Architectural Decisions
+
+1. **Reading Units ≠ Chapters**: Chapters are EPUB structural. ReadingUnits are consumption-sized (~5–10 min). This enables daily habits, per-unit progress, and precise spoiler ceilings.
+
+2. **Format-agnostic progress**: EPUBs, audiobooks, and physical books all flow into the same streak/XP/progress system. The `DailySession` + `StreakCalculator` + `XPEngine` pipeline doesn't care about the source format.
+
+3. **Spoiler ceiling enforced at data layer**: Every AI service filters by `unitOrdinal ≤ currentUnitOrdinal`.
+
+4. **Recap ≠ QA**: `BookRAGService` (V1) is flat-chunk semantic search for Q&A. `BookRAGServiceV2` is hierarchical memory reconstruction for recap. Different retrieval strategies, different output schemas.
+
+5. **On-device AI only**: No API keys, no network calls for AI. Graceful degradation.
+
+6. **Audiobook alignment as sequence problem**: The pipeline treats EPUB ↔ audio sync as fuzzy sequence alignment (classify → transcribe → gate → align), not naive timestamp matching.
+
+7. **Trust-based physical tracking**: No anti-exploit timer for physical books. Users tap "Complete Chapter" on the honor system. This is intentional — Spine is a reading gym, not a DRM system.
+
+8. **Token budget management** (4096-token context window): Hierarchical summaries, compact `@Generable` schemas, separate summarization sessions, terse tool outputs, hard word limits on memory packs.
+
+---
+
+## Appendix A: Key Storage Schema Additions
+
+### AudiobookChapter (extended)
 
 ```swift
-@Model final class Book {
+@Model final class AudiobookChapter {
     @Attribute(.unique) var id: UUID
+    var book: Book?
+    var chapterNumber: Int
     var title: String
-    var author: String
-    var bookDescription: String
-    @Attribute(.externalStorage) var coverImageData: Data?
-    var sourceType: BookSourceType                       // .gutenberg | .local
-    var language: String                                  // default "en"
-    var gutenbergId: String?
-    var localFileURI: String?
-    var tocJSON: String?
-    var manifestJSON: String?
-    var spineJSON: String?
-    var importStatus: ImportStatus                        // .pending→.parsing→.segmenting→.completed|.failed
-    var importError: String?
-    var rawMetadataJSON: String?
-    var genres: [String]
-    var vibes: [String]
-    @Attribute(.externalStorage) var synopsisEmbedding: Data?
-    var popularityScore: Double
-    @Attribute(.externalStorage) var characterGraphJSON: String?
-    var createdAt: Date
-    var updatedAt: Date
-
-    @Relationship(deleteRule: .cascade, inverse: \Chapter.book)          var chapters: [Chapter] = []
-    @Relationship(deleteRule: .cascade, inverse: \ReadingUnit.book)       var readingUnits: [ReadingUnit] = []
-    @Relationship(deleteRule: .cascade, inverse: \ReadingProgress.book)   var readingProgress: ReadingProgress?
-    @Relationship(deleteRule: .cascade, inverse: \Highlight.book)         var highlights: [Highlight] = []
-    @Relationship(deleteRule: .cascade, inverse: \DailySession.book)      var dailySessions: [DailySession] = []
-    @Relationship(deleteRule: .cascade, inverse: \Reaction.book)          var reactions: [Reaction] = []
-    @Relationship(deleteRule: .cascade, inverse: \QuoteSave.book)         var quoteSaves: [QuoteSave] = []
-    @Relationship(deleteRule: .cascade, inverse: \BookInteraction.book)   var interactions: [BookInteraction] = []
-
-    // Computed (not stored):
-    var sortedUnits: [ReadingUnit]   { readingUnits.sorted { $0.ordinal < $1.ordinal } }
-    var sortedChapters: [Chapter]    { chapters.sorted { $0.ordinal < $1.ordinal } }
-    var totalWordCount: Int          { chapters.reduce(0) { $0 + $1.wordCount } }
-    var unitCount: Int               { readingUnits.count }
+    var audioURL: String
+    var durationSeconds: Double
+    var isListened: Bool
+    var lastPosition: Double
+    
+    // Alignment data
+    @Attribute(.externalStorage) var timingsData: Data?    // Encoded ChapterTimings
+    @Attribute(.externalStorage) var transcriptText: String?
+    var alignmentConfidence: Double
+    var matchedEpubChapterOrdinal: Int?
+    
+    var timings: ChapterTimings? { /* decode from timingsData */ }
 }
 ```
 
-### Chapter
+### Book (physical extensions)
 
 ```swift
-@Model final class Chapter {
-    @Attribute(.unique) var id: UUID
-    var book: Book?                                       // inverse of Book.chapters
-    var ordinal: Int
-    var title: String
-    var sourceHref: String
-    @Attribute(.externalStorage) var plainText: String
-    @Attribute(.externalStorage) var htmlContent: String
-    var wordCount: Int
-    var createdAt: Date
+// Added to Book model:
+var totalPhysicalChapters: Int       // default 0
+var physicalCurrentChapter: Int      // default 0
+var userRating: Int?                 // 1–5 stars
+var userNotes: String?               // free-form
 
-    @Relationship(deleteRule: .cascade, inverse: \ReadingUnit.chapter)
-    var readingUnits: [ReadingUnit] = []
-
-    var sortedUnits: [ReadingUnit] { readingUnits.sorted { $0.ordinal < $1.ordinal } }
-}
-```
-
-### ReadingUnit
-
-```swift
-@Model final class ReadingUnit {
-    @Attribute(.unique) var id: UUID
-    var book: Book?                                       // inverse of Book.readingUnits
-    var chapter: Chapter?                                 // inverse of Chapter.readingUnits
-    var ordinal: Int
-    var title: String
-    @Attribute(.externalStorage) var plainText: String
-    @Attribute(.externalStorage) var htmlContent: String
-    var wordCount: Int
-    var estimatedMinutes: Double
-    var startCharOffset: Int
-    var endCharOffset: Int
-    var createdAt: Date
-    var isCompleted: Bool
-    var completedAt: Date?
-
-    @Relationship(deleteRule: .cascade, inverse: \Highlight.readingUnit) var highlights: [Highlight] = []
-    @Relationship(deleteRule: .cascade, inverse: \Reaction.readingUnit)  var reactions: [Reaction] = []
-}
-```
-
-### ReadingProgress
-
-```swift
-@Model final class ReadingProgress {
-    @Attribute(.unique) var id: UUID
-    var book: Book?                                       // inverse of Book.readingProgress
-    var currentUnitId: UUID?
-    var completedUnitCount: Int
-    var completedPercent: Double                           // 0.0–1.0
-    var lastReadAt: Date?
-    var streakAnchorDate: Date?
-    var currentStreak: Int
-    var longestStreak: Int
-
-    var isFinished: Bool { completedPercent >= 1.0 }
-
-    func markUnitCompleted(nextUnitId: UUID?, totalUnits: Int) {
-        completedUnitCount += 1
-        completedPercent = totalUnits > 0 ? Double(completedUnitCount) / Double(totalUnits) : 0.0
-        currentUnitId = nextUnitId
-        lastReadAt = Date()
-    }
-}
-```
-
-### Highlight
-
-```swift
-@Model final class Highlight {
-    @Attribute(.unique) var id: UUID
-    var book: Book?                                       // inverse of Book.highlights
-    var readingUnit: ReadingUnit?                          // inverse of ReadingUnit.highlights
-    var selectedText: String
-    var startLocator: Int                                  // char offset into ReadingUnit.plainText
-    var endLocator: Int
-    var noteText: String?
-    var colorHex: String                                  // default "C49B5C"
-    var isFavorite: Bool
-    var createdAt: Date
-    var updatedAt: Date
-}
-```
-
-### DailySession
-
-```swift
-@Model final class DailySession {
-    @Attribute(.unique) var id: UUID
-    var book: Book?                                       // inverse of Book.dailySessions
-    var readingUnitId: UUID?                               // NOT a @Relationship — UUID reference only
-    var sessionDate: Date                                 // Calendar.current.startOfDay in init
-    var startedAt: Date
-    var completedAt: Date?
-    var minutesSpent: Double
-
-    var isCompleted: Bool { completedAt != nil }
-}
-```
-
-### Reaction
-
-```swift
-@Model final class Reaction {
-    @Attribute(.unique) var id: UUID
-    var book: Book?                                       // inverse of Book.reactions
-    var readingUnit: ReadingUnit?                          // inverse of ReadingUnit.reactions
-    var reactionTypeRaw: String                           // stores ReactionType.rawValue
-    var reflectionText: String?
-    var createdAt: Date
-
-    var reactionType: ReactionType? {                      // computed get/set over raw
-        get { ReactionType(rawValue: reactionTypeRaw) }
-        set { reactionTypeRaw = newValue?.rawValue ?? "" }
-    }
-}
-```
-
-### QuoteSave
-
-```swift
-@Model final class QuoteSave {
-    @Attribute(.unique) var id: UUID
-    var book: Book?                                       // inverse of Book.quoteSaves
-    var readingUnitId: UUID?                               // UUID ref, NOT @Relationship
-    var text: String
-    var createdAt: Date
-}
-```
-
-### BookInteraction
-
-```swift
-@Model final class BookInteraction {
-    @Attribute(.unique) var id: UUID
-    var interactionType: InteractionType
-    var timestamp: Date
-    var rating: Int?                                      // 1–5
-    var reviewText: String?
-    var likedReasons: [String]
-    var dislikedReasons: [String]
-    var dwellTimeSeconds: Double
-    var completionPercent: Double
-    @Relationship var book: Book?                         // inverse of Book.interactions
-}
-```
-
-### UserTasteProfile
-
-```swift
-@Model final class UserTasteProfile {
-    @Attribute(.unique) var id: UUID
-    var preferredGenres: [TasteWeight]                    // JSON-encoded via Codable
-    var preferredVibes: [TasteWeight]
-    var avoidedVibes: [String]
-    var pacePreference: PacePreference                    // .short|.medium|.long|.any
-    var createdAt: Date
-    var lastUpdated: Date
-    var hasCompletedTasteOnboarding: Bool
-}
-// TasteWeight: struct { name: String, weight: Double (0.0–1.0) }
-```
-
-### XPProfile
-
-```swift
-@Model final class XPProfile {
-    @Attribute(.unique) var id: UUID
-    var totalXP: Int
-    var dailyXP: Int
-    var dailyXPDate: Date
-    var weeklyXP: Int
-    var weeklyXPReset: Date
-    var averageWPM: Double
-    var totalReadingSessions: Int
-    var fastestWPM: Double
-    var consistencyScore: Double
-    var dailyGoalHitsThisWeek: Int
-    var unlockedAchievementIDs: [String]
-    var achievementDates: [String: Date]
-    // 5 computed: currentLevel, levelTitle, xpForCurrentLevel, xpForNextLevel, levelProgress
-}
-```
-
-### UserSettings
-
-```swift
-@Model final class UserSettings {
-    @Attribute(.unique) var id: UUID
-    var hasCompletedOnboarding: Bool
-    var readingGoalRaw: Int                               // 5|10|15
-    var readerThemeRaw: String                            // "light"|"sepia"|"dark"
-    var fontSize: Double                                  // default 18.0
-    var lineHeightMultiplier: Double                      // default 1.6
-    var useSerifFont: Bool                                // default true
-    var activeBookId: UUID?
-    var wordsPerMinute: Int                               // default 225
-    var dailyXPGoal: Int                                  // default 30
-}
-```
-
-### ReadingClub
-
-```swift
-@Model final class ReadingClub {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var clubDescription: String
-    var bookId: UUID                                      // UUID ref, NOT @Relationship
-    var currentUnit: Int
-    var memberCount: Int
-    var cloudKitRecordId: String?                          // CKRecord.ID string for manual sync
-    var createdAt: Date
-    var updatedAt: Date
-}
+var isPhysicalBook: Bool { sourceType == .physical }
+var physicalProgress: Double { /* currentChapter / totalChapters */ }
 ```
 
 ---
@@ -996,7 +1000,7 @@ Each has pre-assigned `genres` and `vibes` for immediate recommendation scoring.
 
 ```swift
 enum BookSourceType: String, Codable, CaseIterable, Sendable {
-    case gutenberg, local
+    case gutenberg, local, physical
 }
 
 enum ImportStatus: String, Codable, Sendable {
@@ -1016,7 +1020,7 @@ enum ReadingGoal: Int, Codable, CaseIterable, Sendable {
 }
 
 enum PacePreference: String, Codable, CaseIterable, Sendable {
-    case short, medium, long, any   // <50K, 50K–100K, 100K+, no preference
+    case short, medium, long, any
 }
 
 enum ReactionType: String, Codable, CaseIterable, Sendable {
@@ -1032,14 +1036,29 @@ enum RecapMode {
     case quick, storySoFar, character(name: String? = nil)
 }
 
-// BookMemoryIndex.MemoryEntry.Tier
 enum Tier: Int, Sendable, Comparable {
     case chunk = 0, scene = 1, unitSummary = 2, chapterSummary = 3, arcSummary = 4
 }
 
-// Achievement.Category
 enum Category: String, Sendable, CaseIterable {
     case streak = "Streaks", milestone = "Milestones", skill = "Skills", lifestyle = "Lifestyle"
+}
+
+// TextBlockClassifier
+enum BlockKind: String, CaseIterable {
+    case boilerplate_discard, front_matter_optional, toc_discard,
+         chapter_heading_metadata, body_text_keep, footnote_optional,
+         back_matter_optional
+}
+
+// LibraryView
+enum LibrarySegment: String, CaseIterable {
+    case continueReading = "Continue"
+    case upNext = "Up Next"
+    case completed = "Completed"
+    case all = "All"
+    case physicalBooks = "Physical"
+    case audiobooks = "Audiobooks"
 }
 ```
 
@@ -1052,4 +1071,13 @@ enum Category: String, Sendable, CaseIterable {
 3. **Separate summarization sessions**: Each summary generated in a fresh `LanguageModelSession`, then stored
 4. **Tool output compression**: All tool return values are terse strings (~50–200 chars)
 5. **Memory pack budget**: Hard word limits enforced during assembly (600–800 words depending on mode)
-6. **Safety guardrail handling**: If `LanguageModelSession` refuses to summarize content, `summarize()` catches the error, logs it, returns `nil`. The memory index is built without that summary — retrieval continues with available entries.
+6. **Safety guardrail handling**: If `LanguageModelSession` refuses to summarize content, `summarize()` catches the error, logs it, returns `nil`. The memory index is built without that summary.
+
+---
+
+## Appendix D: Seed Data
+
+Bundled Project Gutenberg EPUBs auto-ingested on first launch via `SeedCatalog.swift`:
+- Pride and Prejudice, Wuthering Heights, Frankenstein, Romeo and Juliet, Alice's Adventures in Wonderland, The Great Gatsby
+
+Each has pre-assigned `genres` and `vibes` for immediate recommendation scoring.

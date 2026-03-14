@@ -56,15 +56,22 @@ struct SelectableTextView: UIViewRepresentable {
         textView.onDefineWord = onDefineWord
         textView.onTapHighlight = onTapHighlight
         
-        // Use a tap gesture for highlight taps — require failure of long press
-        // so it doesn't conflict with text selection
+        // Tap gesture for highlight-tap detection only
+        // Requires that no text is currently selected (via gestureRecognizerShouldBegin).
+        // Does NOT fire simultaneously with selection gestures to avoid gate timeouts.
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         tapGesture.cancelsTouchesInView = false
         tapGesture.delaysTouchesBegan = false
         tapGesture.delaysTouchesEnded = false
-        // Don't compete with the text view's own gestures —
-        // only fire when no text is selected
         tapGesture.delegate = context.coordinator
+        
+        // Require built-in long-press (selection) gestures to fail first
+        for gesture in textView.gestureRecognizers ?? [] {
+            if gesture is UILongPressGestureRecognizer {
+                tapGesture.require(toFail: gesture)
+            }
+        }
+        
         textView.addGestureRecognizer(tapGesture)
         
         configureText(textView)
@@ -78,7 +85,13 @@ struct SelectableTextView: UIViewRepresentable {
         textView.onDefineWord = onDefineWord
         textView.onTapHighlight = onTapHighlight
         textView.highlightRanges = highlights
-        configureText(textView)
+        
+        // Only rebuild attributed string when content actually changed
+        let isDirty = textView.lastConfiguredText != text
+            || textView.lastConfiguredHighlights != highlights
+        if isDirty {
+            configureText(textView)
+        }
     }
     
     private func configureText(_ textView: SpineTextView) {
@@ -113,6 +126,11 @@ struct SelectableTextView: UIViewRepresentable {
         
         textView.attributedText = attrString
         textView.highlightRanges = highlights
+        
+        // Track what we configured to avoid redundant rebuilds
+        textView.lastConfiguredText = text
+        textView.lastConfiguredHighlights = highlights
+        
         textView.invalidateIntrinsicContentSize()
     }
     
@@ -127,13 +145,18 @@ struct SelectableTextView: UIViewRepresentable {
             }
             
             let selRange = textView.selectedRange
-            guard selRange.length > 0,
-                  let text = textView.text,
-                  let swiftRange = Range(selRange, in: text) else {
+            guard selRange.length > 0 else {
                 return UIMenu(children: suggestedActions)
             }
             
-            let selectedText = String(text[swiftRange])
+            // Use attributedText.string — more reliable than textView.text for
+            // selections starting at position 0 with attributed content
+            let fullText = textView.attributedText.string
+            guard let swiftRange = Range(selRange, in: fullText) else {
+                return UIMenu(children: suggestedActions)
+            }
+            
+            let selectedText = String(fullText[swiftRange])
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             
             guard !selectedText.isEmpty else {
@@ -142,14 +165,16 @@ struct SelectableTextView: UIViewRepresentable {
             
             var customActions: [UIMenuElement] = []
             
+            // Capture text NOW — UIKit may clear the selection before firing actions
+            let capturedText = selectedText
+            
             // Highlight action
             if let onHighlight = spineTextView.onHighlight {
                 let highlightAction = UIAction(
                     title: "Highlight",
                     image: UIImage(systemName: "highlighter")
                 ) { _ in
-                    let currentText = self.getSelectedText(from: textView) ?? selectedText
-                    onHighlight(currentText)
+                    onHighlight(capturedText)
                 }
                 customActions.append(highlightAction)
             }
@@ -160,34 +185,20 @@ struct SelectableTextView: UIViewRepresentable {
                     title: "Share Quote",
                     image: UIImage(systemName: "square.and.arrow.up")
                 ) { _ in
-                    let currentText = self.getSelectedText(from: textView) ?? selectedText
-                    onShareQuote(currentText)
+                    onShareQuote(capturedText)
                 }
                 customActions.append(shareAction)
             }
             
-            // Explain action
+            // Explain action (combines Explain + Define)
             if let onExplain = spineTextView.onExplain {
                 let explainAction = UIAction(
                     title: "Explain",
                     image: UIImage(systemName: "lightbulb")
                 ) { _ in
-                    let currentText = self.getSelectedText(from: textView) ?? selectedText
-                    onExplain(currentText)
+                    onExplain(capturedText)
                 }
                 customActions.append(explainAction)
-            }
-            
-            // Define Word action
-            if let onDefineWord = spineTextView.onDefineWord {
-                let defineAction = UIAction(
-                    title: "Define",
-                    image: UIImage(systemName: "character.book.closed")
-                ) { _ in
-                    let currentText = self.getSelectedText(from: textView) ?? selectedText
-                    onDefineWord(currentText)
-                }
-                customActions.append(defineAction)
             }
             
             let spineMenu = UIMenu(title: "", options: .displayInline, children: customActions)
@@ -196,13 +207,17 @@ struct SelectableTextView: UIViewRepresentable {
         
         // MARK: - UIGestureRecognizerDelegate
         
-        /// Allow our tap gesture to work simultaneously with UITextView's built-in
-        /// gestures so we don't cause contention / gate timeouts.
+        /// Allow our tap gesture to work simultaneously with most gestures,
+        /// but NOT with long-press (selection) gestures to avoid gate timeouts.
         func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
-            true
+            // Don't compete with selection gestures
+            if otherGestureRecognizer is UILongPressGestureRecognizer {
+                return false
+            }
+            return true
         }
         
         /// Only recognize our tap when no text is currently selected.
@@ -219,18 +234,15 @@ struct SelectableTextView: UIViewRepresentable {
             
             let point = gesture.location(in: textView)
             
-            // Determine which character index was tapped
-            let layoutManager = textView.layoutManager
-            let textContainer = textView.textContainer
+            // Use closestPosition API — works with both TextKit 1 and 2,
+            // avoids forcing TextKit 1 compatibility mode
             let offset = textView.textContainerInset
             let adjustedPoint = CGPoint(x: point.x - offset.left, y: point.y - offset.top)
-            let charIndex = layoutManager.characterIndex(
-                for: adjustedPoint,
-                in: textContainer,
-                fractionOfDistanceBetweenInsertionPoints: nil
-            )
             
-            guard let text = textView.text else { return }
+            guard let position = textView.closestPosition(to: adjustedPoint) else { return }
+            let charIndex = textView.offset(from: textView.beginningOfDocument, to: position)
+            
+            let text = textView.attributedText.string
             
             // Check if the tapped character falls within any highlight range
             for hl in textView.highlightRanges {
@@ -246,12 +258,12 @@ struct SelectableTextView: UIViewRepresentable {
         
         private func getSelectedText(from textView: UITextView) -> String? {
             let selRange = textView.selectedRange
-            guard selRange.length > 0,
-                  let text = textView.text,
-                  let swiftRange = Range(selRange, in: text) else {
+            guard selRange.length > 0 else { return nil }
+            let fullText = textView.attributedText.string
+            guard let swiftRange = Range(selRange, in: fullText) else {
                 return nil
             }
-            let selected = String(text[swiftRange])
+            let selected = String(fullText[swiftRange])
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             return selected.isEmpty ? nil : selected
         }
@@ -270,24 +282,39 @@ class SpineTextView: UITextView {
     var onTapHighlight: ((UUID) -> Void)?
     var highlightRanges: [SelectableTextView.HighlightRange] = []
     
+    // Dirty tracking — skip redundant configureText calls
+    var lastConfiguredText: String?
+    var lastConfiguredHighlights: [SelectableTextView.HighlightRange]?
+    
+    // Cache the last computed height to avoid redundant sizeThatFits
+    private var cachedHeight: CGFloat?
+    
     override var intrinsicContentSize: CGSize {
-        // Use self.window.windowScene.screen for non-deprecated screen access
+        if let cached = cachedHeight {
+            return CGSize(width: UIView.noIntrinsicMetric, height: cached)
+        }
         let screenWidth: CGFloat
         if bounds.width > 0 {
             screenWidth = bounds.width
         } else if let screen = window?.windowScene?.screen {
             screenWidth = screen.bounds.width - 48
         } else {
-            screenWidth = 375 - 48 // safe fallback (iPhone SE width)
+            screenWidth = 375 - 48
         }
         let size = sizeThatFits(CGSize(width: screenWidth, height: .greatestFiniteMagnitude))
+        cachedHeight = size.height
         return CGSize(width: UIView.noIntrinsicMetric, height: size.height)
     }
     
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        invalidateIntrinsicContentSize()
+    override func invalidateIntrinsicContentSize() {
+        cachedHeight = nil
+        super.invalidateIntrinsicContentSize()
     }
+    
+    // REMOVED: layoutSubviews no longer calls invalidateIntrinsicContentSize.
+    // That was creating an infinite layout loop:
+    //   layoutSubviews → invalidate → setNeedsLayout → layoutSubviews → ...
+    // Size is now only invalidated when configureText sets new content.
 }
 
 // MARK: - UIColor Hex Initializer

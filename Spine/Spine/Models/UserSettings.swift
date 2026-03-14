@@ -64,6 +64,11 @@ final class UserSettings {
     // MARK: - Gamification
     var dailyXPGoal: Int
     
+    // MARK: - Notifications
+    var dailyReminderEnabled: Bool
+    var reminderHour: Int        // 0–23
+    var reminderMinute: Int      // 0–59
+    
     var readingGoal: ReadingGoal {
         get { ReadingGoal(rawValue: readingGoalRaw) ?? .tenMinutes }
         set { readingGoalRaw = newValue.rawValue }
@@ -90,6 +95,9 @@ final class UserSettings {
         self.lineGuideDimAmount = 0.5
         self.wordsPerMinute = 225
         self.dailyXPGoal = 30
+        self.dailyReminderEnabled = false
+        self.reminderHour = 20    // 8 PM default
+        self.reminderMinute = 0
         self.activeBookId = nil
     }
 }

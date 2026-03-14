@@ -205,6 +205,27 @@ struct TodayView: View {
                     
                     Spacer()
                     
+                    // Lesson count + milestone
+                    VStack(alignment: .leading, spacing: 2) {
+                        let completed = book.readingProgress?.completedUnitCount ?? 0
+                        let total = book.unitCount
+                        Text("Lesson \(completed + 1) of \(total)")
+                            .font(SpineTokens.Typography.caption2)
+                            .foregroundStyle(SpineTokens.Colors.espresso)
+                        
+                        // Milestone proximity
+                        if let chapter = unit.chapter {
+                            let chapterUnits = chapter.readingUnits.count
+                            let chapterDone = chapter.readingUnits.filter { $0.isCompleted }.count
+                            let remaining = chapterUnits - chapterDone
+                            if remaining > 0 && remaining <= 3 {
+                                Text("\(remaining) lesson\(remaining == 1 ? "" : "s") from finishing \(chapter.title)")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(SpineTokens.Colors.successGreen)
+                            }
+                        }
+                    }
+                    
                     HStack(spacing: SpineTokens.Spacing.sm) {
                         Label(
                             "\(Int(ceil(unit.estimatedMinutes))) min",
@@ -213,14 +234,23 @@ struct TodayView: View {
                         .font(SpineTokens.Typography.caption2)
                         .foregroundStyle(SpineTokens.Colors.accentGold)
                         
-                        // XP reward preview
-                        Label("+10 XP", systemImage: "star.fill")
+                        Label("+25 XP", systemImage: "star.fill")
                             .font(SpineTokens.Typography.caption2)
                             .foregroundStyle(SpineTokens.Colors.accentAmber)
                     }
                 }
                 
                 Spacer()
+            }
+            
+            // Streak recovery message
+            if let progress = book.readingProgress,
+               progress.currentStreak == 1,
+               (progress.completedUnitCount ?? 0) > 1 {
+                Text("You're rebuilding your streak")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(SpineTokens.Colors.streakFlame)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             
             // CTA Button
@@ -231,7 +261,7 @@ struct TodayView: View {
             } label: {
                 HStack {
                     Image(systemName: unit.ordinal == 0 ? "book.fill" : "arrow.right")
-                    Text(unit.ordinal == 0 ? "Start Reading" : "Continue Reading")
+                    Text(unit.ordinal == 0 ? "Start Today's Lesson" : "Resume Today's Lesson")
                         .font(SpineTokens.Typography.headline)
                 }
                 .foregroundStyle(.white)
@@ -277,8 +307,12 @@ struct TodayView: View {
                 // Progress
                 let completed = book.readingProgress?.completedUnitCount ?? 0
                 let total = book.unitCount
-                Text("\(completed) of \(total) units completed")
+                let pct = Int((book.readingProgress?.completedPercent ?? 0) * 100)
+                Text("\(pct)% through \(book.title)")
                     .font(SpineTokens.Typography.caption)
+                    .foregroundStyle(SpineTokens.Colors.subtleGray)
+                Text("\(completed) of \(total) lessons completed")
+                    .font(SpineTokens.Typography.caption2)
                     .foregroundStyle(SpineTokens.Colors.subtleGray)
                 
                 if let lastRead = book.readingProgress?.lastReadAt {

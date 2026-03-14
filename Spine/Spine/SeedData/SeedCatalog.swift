@@ -190,40 +190,205 @@ struct SeedCatalog {
     static func seedIfNeeded(modelContext: ModelContext) {
         let descriptor = FetchDescriptor<Book>()
         let existingCount = (try? modelContext.fetchCount(descriptor)) ?? 0
-        guard existingCount == 0 else { return }
         
-        print("📚 Seeding catalog with \(books.count) books...")
-        
-        for seed in books {
-            let book = Book(
-                title: seed.title,
-                author: seed.author,
-                bookDescription: seed.description,
-                sourceType: .gutenberg,
-                language: seed.language,
-                gutenbergId: seed.gutenbergId
-            )
-            book.importStatus = .pending
-            book.genres = seed.genres
-            book.vibes = seed.vibes
-            book.themes = seed.themes
-            book.longDescription = seed.longDescription
-            book.publicationYear = seed.publicationYear
-            book.literaryPeriod = seed.literaryPeriod
-            book.authorMetadata = seed.authorMetadata
+        if existingCount == 0 {
+            print("📚 Seeding catalog with \(books.count) books...")
             
-            if let bundleURL = findBundledEPUB(filename: seed.bundleFilename) {
-                book.localFileURI = bundleURL.path
-                print("📚 Found bundled EPUB: \(seed.bundleFilename) → \(bundleURL.path)")
-            } else {
-                print("📚 ⚠️ Bundled EPUB NOT found: \(seed.bundleFilename)")
+            for seed in books {
+                let book = Book(
+                    title: seed.title,
+                    author: seed.author,
+                    bookDescription: seed.description,
+                    sourceType: .gutenberg,
+                    language: seed.language,
+                    gutenbergId: seed.gutenbergId
+                )
+                book.importStatus = .pending
+                book.genres = seed.genres
+                book.vibes = seed.vibes
+                book.themes = seed.themes
+                book.longDescription = seed.longDescription
+                book.publicationYear = seed.publicationYear
+                book.literaryPeriod = seed.literaryPeriod
+                book.authorMetadata = seed.authorMetadata
+                
+                if let bundleURL = findBundledEPUB(filename: seed.bundleFilename) {
+                    book.localFileURI = bundleURL.path
+                    print("📚 Found bundled EPUB: \(seed.bundleFilename) → \(bundleURL.path)")
+                } else {
+                    print("📚 ⚠️ Bundled EPUB NOT found: \(seed.bundleFilename)")
+                }
+                
+                modelContext.insert(book)
             }
             
-            modelContext.insert(book)
+            try? modelContext.save()
+            print("📚 Seed complete.")
+        }
+        
+        // Always run — has its own deduplication via gutenbergId check
+        DiscoverCatalog.seedIfNeeded(modelContext: modelContext)
+        
+        // Seed paths after all books exist
+        seedPathsIfNeeded(modelContext: modelContext)
+    }
+    
+    /// Seed curated reading paths. Matches books by title.
+    @MainActor
+    static func seedPathsIfNeeded(modelContext: ModelContext) {
+        let descriptor = FetchDescriptor<ReadingPath>()
+        let existingCount = (try? modelContext.fetchCount(descriptor)) ?? 0
+        guard existingCount == 0 else { return }
+        
+        let bookDescriptor = FetchDescriptor<Book>()
+        guard let allBooks = try? modelContext.fetch(bookDescriptor) else { return }
+        
+        func bookIdsByTitles(_ titles: [String]) -> [UUID] {
+            titles.compactMap { title in
+                allBooks.first(where: { $0.title.localizedCaseInsensitiveContains(title) })?.id
+            }
+        }
+        
+        let paths: [(String, String, String, String, String, ReadingPath.Difficulty, Int, [String])] = [
+            (
+                "Starter Classics",
+                "Short, accessible books to build your reading habit",
+                "The perfect starting point. These shorter classics are approachable, engaging, and will give you the confidence to keep going. Finish your first book in days, not months.",
+                "star.fill",
+                "4CAF50",
+                .beginner,
+                3,
+                ["The Great Gatsby", "Alice", "Candide", "Heart of Darkness"]
+            ),
+            (
+                "Greek Foundations",
+                "The epics and dialogues that built Western thought",
+                "Start where civilization started. Homer's epic heroes, Plato's relentless questioning, and the birth of democracy—these are the texts that every later classic is in conversation with.",
+                "building.columns.fill",
+                "5C6BC0",
+                .intermediate,
+                12,
+                ["Iliad", "Odyssey", "Republic", "Symposium", "Apology", "Nicomachean Ethics"]
+            ),
+            (
+                "Shakespeare Essential",
+                "The five plays everyone should read",
+                "Shakespeare wrote for the cheap seats—fast, funny, bloody, and unforgettable. These are shorter than you think and more dramatic than anything streaming. Read one a week.",
+                "theatermasks.fill",
+                "FF5722",
+                .intermediate,
+                5,
+                ["Hamlet", "Macbeth", "Othello", "King Lear", "Tempest"]
+            ),
+            (
+                "Love & Society",
+                "Romance, class, and the games people play",
+                "Fall in love with love—and the sharp social observations that surround it. These classics explore courtship, reputation, and the courage it takes to choose your own path.",
+                "heart.fill",
+                "E91E63",
+                .beginner,
+                8,
+                ["Pride and Prejudice", "Romeo and Juliet", "Anna Karenina", "Middlemarch"]
+            ),
+            (
+                "Monsters & Gothic",
+                "Dark tales of creation, obsession, and the supernatural",
+                "The original horror stories that invented entire genres. From Shelley's creature to Brontë's moors, these novels explore what happens when ambition, desire, and nature collide in the dark.",
+                "moon.stars.fill",
+                "9C27B0",
+                .intermediate,
+                6,
+                ["Frankenstein", "Wuthering Heights", "Heart of Darkness"]
+            ),
+            (
+                "Epic Poetry",
+                "The grandest stories ever told in verse",
+                "From Troy to Hell to Paradise—these are the biggest, most ambitious poems in human history. Each one defined an entire civilization's sense of itself.",
+                "flame.fill",
+                "FF6D00",
+                .advanced,
+                20,
+                ["Iliad", "Odyssey", "Aeneid", "Divine Comedy", "Paradise Lost"]
+            ),
+            (
+                "Philosophy Core",
+                "The essential questions: justice, knowledge, the good life",
+                "What is real? What is good? How should you live? These texts don't answer your questions—they change the questions you ask.",
+                "lightbulb.fill",
+                "FFC107",
+                .advanced,
+                16,
+                ["Apology", "Republic", "Nicomachean Ethics", "Meditations", "Leviathan", "Discourse on the Method", "Critique of Pure Reason"]
+            ),
+            (
+                "Fathers of History",
+                "How we learned to tell our own story",
+                "Before these writers, the past was myth. After them, it became something you could investigate, argue about, and learn from. These are the founders of history as a discipline.",
+                "scroll.fill",
+                "795548",
+                .advanced,
+                14,
+                ["History of Herodotus", "Peloponnesian War", "Plutarch", "Decline and Fall"]
+            ),
+            (
+                "Science Revolution",
+                "The discoveries that changed everything",
+                "Darwin on evolution, Newton on light, Harvey on the heart—these are the original papers and books that overturned centuries of assumption and built the modern world.",
+                "atom",
+                "00BCD4",
+                .advanced,
+                10,
+                ["Origin of Species", "On the Nature of Things", "Opticks", "Dialogues Concerning Two New Sciences"]
+            ),
+            (
+                "Dark Psychology",
+                "Obsession, revenge, and the human mind at its extremes",
+                "Venture into the most psychologically intense literature ever written. These books don't just tell stories—they make you question what you'd do under impossible pressure.",
+                "brain.head.profile",
+                "D32F2F",
+                .advanced,
+                12,
+                ["Crime and Punishment", "Brothers Karamazov", "Moby Dick", "Frankenstein"]
+            ),
+            (
+                "Political Thought",
+                "Power, freedom, and how societies organize themselves",
+                "From Machiavelli's cunning prince to Mill's defense of liberty—these are the texts that kings, revolutionaries, and founders read before making history.",
+                "building.2.fill",
+                "1565C0",
+                .advanced,
+                10,
+                ["Prince", "Leviathan", "Social Contract", "On Liberty", "Federalist", "Communist Manifesto"]
+            ),
+            (
+                "The Russian Soul",
+                "Tolstoy, Dostoevsky, and the deepest questions",
+                "No literature goes deeper into guilt, redemption, faith, and the human condition. These novels are long—but they will change how you see people forever.",
+                "snowflake",
+                "42A5F5",
+                .advanced,
+                20,
+                ["War and Peace", "Brothers Karamazov", "Crime and Punishment", "Anna Karenina"]
+            ),
+        ]
+        
+        for (index, p) in paths.enumerated() {
+            let path = ReadingPath(
+                title: p.0,
+                subtitle: p.1,
+                description: p.2,
+                iconName: p.3,
+                themeColorHex: p.4,
+                difficulty: p.5,
+                estimatedWeeks: p.6,
+                sortOrder: index,
+                bookIds: bookIdsByTitles(p.7)
+            )
+            modelContext.insert(path)
         }
         
         try? modelContext.save()
-        print("📚 Seed complete.")
+        print("📚 Seeded \(paths.count) reading paths")
     }
     
     /// Ingest all un-ingested bundled EPUBs.

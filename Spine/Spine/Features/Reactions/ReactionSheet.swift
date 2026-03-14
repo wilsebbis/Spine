@@ -14,7 +14,7 @@ struct ReactionSheet: View {
     let onDismiss: () -> Void
     
     @State private var selectedReactions: Set<ReactionType> = []
-    @State private var reflectionText = ""
+    @State private var selectedVerdict: ReadingVerdict?
     @State private var favoriteQuote = ""
     @State private var showQuoteField = false
     
@@ -50,18 +50,17 @@ struct ReactionSheet: View {
                         }
                     }
                     
-                    // Reflection text
-                    VStack(alignment: .leading, spacing: SpineTokens.Spacing.xs) {
-                        Text("Quick reflection (optional)")
-                            .font(SpineTokens.Typography.caption2)
-                            .foregroundStyle(SpineTokens.Colors.subtleGray)
+                    // Verdict chips (Layer C)
+                    VStack(alignment: .leading, spacing: SpineTokens.Spacing.sm) {
+                        Text("Your verdict")
+                            .font(SpineTokens.Typography.headline)
+                            .foregroundStyle(SpineTokens.Colors.espresso)
                         
-                        TextField("What stood out to you?", text: $reflectionText, axis: .vertical)
-                            .font(SpineTokens.Typography.body)
-                            .lineLimit(2...4)
-                            .padding(SpineTokens.Spacing.sm)
-                            .background(SpineTokens.Colors.warmStone.opacity(0.15))
-                            .clipShape(RoundedRectangle(cornerRadius: SpineTokens.Radius.medium))
+                        SpineFlowLayout(spacing: SpineTokens.Spacing.xs) {
+                            ForEach(ReadingVerdict.allCases, id: \.self) { verdict in
+                                verdictChip(verdict)
+                            }
+                        }
                     }
                     
                     // Save favorite quote
@@ -154,6 +153,9 @@ struct ReactionSheet: View {
                 }
             }
         }
+        .onAppear {
+            loadExistingReactions()
+        }
     }
     
     // MARK: - Reaction Chip
@@ -200,9 +202,11 @@ struct ReactionSheet: View {
             let reaction = Reaction(
                 book: book,
                 readingUnit: unit,
-                reactionType: reactionType,
-                reflectionText: reflectionText.isEmpty ? nil : reflectionText
+                reactionType: reactionType
             )
+            if let v = selectedVerdict {
+                reaction.verdictRaw = v.rawValue
+            }
             modelContext.insert(reaction)
             
             AnalyticsService.shared.log(.reactionSaved, properties: [
@@ -225,5 +229,61 @@ struct ReactionSheet: View {
         try? modelContext.save()
         dismiss()
         onDismiss()
+    }
+    
+    // MARK: - Load Existing
+    
+    /// Populate state from previously saved reactions so they persist across sheet reopens.
+    private func loadExistingReactions() {
+        // Load reactions for this unit
+        let unitId = unit.id
+        let existingReactions = book.reactions.filter { $0.readingUnit?.id == unitId }
+        for reaction in existingReactions {
+            if let type = reaction.reactionType {
+                selectedReactions.insert(type)
+            }
+            if selectedVerdict == nil, let v = reaction.verdict {
+                selectedVerdict = v
+            }
+        }
+        
+        // Load existing quote for this unit
+        let existingQuotes = book.quoteSaves.filter { $0.readingUnitId == unitId }
+        if let quote = existingQuotes.first {
+            favoriteQuote = quote.text
+            showQuoteField = true
+        }
+    }
+    
+    // MARK: - Verdict Chip
+    
+    private func verdictChip(_ verdict: ReadingVerdict) -> some View {
+        let isSelected = selectedVerdict == verdict
+        
+        return Button {
+            selectedVerdict = isSelected ? nil : verdict
+        } label: {
+            HStack(spacing: SpineTokens.Spacing.xxs) {
+                Text(verdict.emoji)
+                Text(verdict.rawValue)
+                    .font(SpineTokens.Typography.caption2)
+            }
+            .foregroundStyle(isSelected ? SpineTokens.Colors.espresso : SpineTokens.Colors.subtleGray)
+            .padding(.horizontal, SpineTokens.Spacing.sm)
+            .padding(.vertical, SpineTokens.Spacing.xs)
+            .background(
+                isSelected ?
+                SpineTokens.Colors.accentGold.opacity(0.2) :
+                SpineTokens.Colors.warmStone.opacity(0.15)
+            )
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(
+                        isSelected ? SpineTokens.Colors.accentGold : Color.clear,
+                        lineWidth: 1
+                    )
+            )
+        }
     }
 }

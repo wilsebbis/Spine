@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 // MARK: - Define Word Sheet
 // Shows a contextual word definition powered by on-device AI.
@@ -6,13 +7,16 @@ import SwiftUI
 
 struct DefineWordSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     
     let word: String
     let context: String
+    var book: Book? = nil
     
     @State private var definition: String = ""
     @State private var isLoading = true
     @State private var error: String?
+    @State private var savedToDeck = false
     
     private let aiService: AIServiceProtocol = FoundationModelService()
     
@@ -76,11 +80,40 @@ struct DefineWordSheet: View {
             
             Spacer()
             
-            // Done button
-            Button("Done") { dismiss() }
-                .font(SpineTokens.Typography.headline)
-                .foregroundStyle(SpineTokens.Colors.accentGold)
-                .padding(.bottom, SpineTokens.Spacing.lg)
+            // Action buttons
+            HStack(spacing: SpineTokens.Spacing.md) {
+                // Save to Deck
+                if !isLoading && error == nil {
+                    Button {
+                        saveToDeck()
+                    } label: {
+                        Label(
+                            savedToDeck ? "Saved ✓" : "Save to Deck",
+                            systemImage: savedToDeck ? "checkmark.circle.fill" : "plus.rectangle.on.rectangle"
+                        )
+                        .font(SpineTokens.Typography.caption)
+                        .foregroundStyle(savedToDeck ? SpineTokens.Colors.successGreen : SpineTokens.Colors.espresso)
+                        .padding(.horizontal, SpineTokens.Spacing.md)
+                        .padding(.vertical, SpineTokens.Spacing.xs)
+                        .background(
+                            savedToDeck
+                                ? SpineTokens.Colors.successGreen.opacity(0.1)
+                                : SpineTokens.Colors.warmStone.opacity(0.15)
+                        )
+                        .clipShape(Capsule())
+                    }
+                    .disabled(savedToDeck)
+                }
+                
+                Spacer()
+                
+                // Done
+                Button("Done") { dismiss() }
+                    .font(SpineTokens.Typography.headline)
+                    .foregroundStyle(SpineTokens.Colors.accentGold)
+            }
+            .padding(.horizontal, SpineTokens.Spacing.lg)
+            .padding(.bottom, SpineTokens.Spacing.lg)
         }
         .presentationDetents([.medium])
         .presentationDragIndicator(.hidden)
@@ -114,5 +147,27 @@ struct DefineWordSheet: View {
             self.error = "Could not generate definition. Try again later."
             isLoading = false
         }
+    }
+    
+    // MARK: - Save to Vocabulary Deck
+    
+    private func saveToDeck() {
+        let vocabWord = VocabularyWord(
+            word: word,
+            definition: definition,
+            contextSentence: contextSnippet,
+            book: book
+        )
+        modelContext.insert(vocabWord)
+        try? modelContext.save()
+        
+        withAnimation(.easeInOut(duration: 0.3)) {
+            savedToDeck = true
+        }
+        
+        AnalyticsService.shared.log(.wordDefined, properties: [
+            "word": word,
+            "saved_to_deck": "true"
+        ])
     }
 }

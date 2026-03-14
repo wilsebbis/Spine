@@ -113,28 +113,59 @@ struct BookDetailView: View {
             sectionHeader("About This Book")
             
             VStack(alignment: .leading, spacing: SpineTokens.Spacing.xs) {
-                // Short description always visible
-                Text(book.bookDescription)
-                    .font(SpineTokens.Typography.body)
-                    .foregroundStyle(SpineTokens.Colors.espresso)
-                
-                // Long description expandable
-                if let longDesc = book.longDescription {
-                    if isDescriptionExpanded {
-                        Text(longDesc)
+                if book.bookDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // Generate a contextual about from available book metadata
+                    if let year = book.publicationYear, !book.author.isEmpty {
+                        Text("\(book.title) by \(book.author), published in \(String(year)). This edition contains \(book.unitCount) reading units across \(book.chapters.count) chapters.")
                             .font(SpineTokens.Typography.body)
-                            .foregroundStyle(SpineTokens.Colors.espresso.opacity(0.85))
-                            .transition(.opacity.combined(with: .move(edge: .top)))
+                            .foregroundStyle(SpineTokens.Colors.espresso)
+                    } else if !book.author.isEmpty {
+                        Text("\(book.title) by \(book.author). This edition contains \(book.unitCount) reading units across \(book.chapters.count) chapters.")
+                            .font(SpineTokens.Typography.body)
+                            .foregroundStyle(SpineTokens.Colors.espresso)
+                    } else {
+                        // True fallback — no metadata at all
+                        VStack(spacing: SpineTokens.Spacing.sm) {
+                            Image(systemName: "text.book.closed")
+                                .font(.system(size: 28))
+                                .foregroundStyle(SpineTokens.Colors.warmStone)
+                            Text("No description available")
+                                .font(SpineTokens.Typography.caption)
+                                .foregroundStyle(SpineTokens.Colors.subtleGray)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                     
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            isDescriptionExpanded.toggle()
-                        }
-                    } label: {
-                        Text(isDescriptionExpanded ? "Show Less" : "Read More")
+                    // Show themes/genres as supplementary info
+                    if !book.genres.isEmpty {
+                        Text(book.genres.joined(separator: " \u{00B7} "))
                             .font(SpineTokens.Typography.caption)
-                            .foregroundStyle(SpineTokens.Colors.accentGold)
+                            .foregroundStyle(SpineTokens.Colors.subtleGray)
+                    }
+                } else {
+                    // Normal description
+                    Text(book.bookDescription)
+                        .font(SpineTokens.Typography.body)
+                        .foregroundStyle(SpineTokens.Colors.espresso)
+                    
+                    // Long description expandable
+                    if let longDesc = book.longDescription {
+                        if isDescriptionExpanded {
+                            Text(longDesc)
+                                .font(SpineTokens.Typography.body)
+                                .foregroundStyle(SpineTokens.Colors.espresso.opacity(0.85))
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                        
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                isDescriptionExpanded.toggle()
+                            }
+                        } label: {
+                            Text(isDescriptionExpanded ? "Show Less" : "Read More")
+                                .font(SpineTokens.Typography.caption)
+                                .foregroundStyle(SpineTokens.Colors.accentGold)
+                        }
                     }
                 }
             }

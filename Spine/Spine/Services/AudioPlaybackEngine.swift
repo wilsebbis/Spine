@@ -7,7 +7,7 @@ import Combine
 // Provides current time observation for driving karaoke highlighting.
 
 @Observable
-final class AudioPlaybackEngine {
+final class AudioPlaybackEngine: NSObject, AVAudioPlayerDelegate {
     
     // MARK: - State
     
@@ -16,8 +16,18 @@ final class AudioPlaybackEngine {
     var duration: Double = 0.0
     var playbackRate: Float = 1.0
     
+    /// Called when a track finishes playing naturally (not paused/stopped).
+    var onTrackFinished: (() -> Void)?
+    
     private var player: AVAudioPlayer?
     private var displayLink: CADisplayLink?
+    
+    /// Seconds to skip at the start of each file (e.g., LibriVox disclaimer).
+    var startOffset: Double = 0.0
+    
+    override init() {
+        super.init()
+    }
     
     // MARK: - Load
     
@@ -30,10 +40,16 @@ final class AudioPlaybackEngine {
         try session.setActive(true)
         
         player = try AVAudioPlayer(contentsOf: url)
+        player?.delegate = self
         player?.enableRate = true
         player?.prepareToPlay()
         duration = player?.duration ?? 0
-        currentTime = 0
+        currentTime = startOffset
+        
+        // Apply start offset
+        if startOffset > 0 {
+            player?.currentTime = startOffset
+        }
     }
     
     // MARK: - Playback Controls
@@ -64,12 +80,19 @@ final class AudioPlaybackEngine {
     
     /// Seek to a specific time (e.g., when user taps a word).
     func seek(to time: Double) {
-        player?.currentTime = time
-        currentTime = time
+        let clampedTime = max(startOffset, time)
+        player?.currentTime = clampedTime
+        currentTime = clampedTime
         if !isPlaying {
-            // Show updated position even when paused
             play()
         }
+    }
+    
+    /// Skip forward/backward by seconds.
+    func skip(by seconds: Double) {
+        let newTime = currentTime + seconds
+        let clamped = max(startOffset, min(duration, newTime))
+        seek(to: clamped)
     }
     
     /// Set playback speed (0.5x – 2.0x).
@@ -77,6 +100,16 @@ final class AudioPlaybackEngine {
         playbackRate = max(0.5, min(2.0, rate))
         if isPlaying {
             player?.rate = playbackRate
+        }
+    }
+    
+    // MARK: - AVAudioPlayerDelegate
+    
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        isPlaying = false
+        stopDisplayLink()
+        if flag {
+            onTrackFinished?()
         }
     }
     

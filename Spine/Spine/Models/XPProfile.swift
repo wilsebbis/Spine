@@ -128,25 +128,38 @@ final class XPProfile {
     }
 }
 
-// MARK: - XP Level Table
-
 enum XPLevelTable {
     static let levels: [(level: Int, xp: Int, title: String)] = [
-        (1,     0,     "Bookworm"),
-        (2,     50,    "Page Turner"),
-        (3,     150,   "Chapter Chaser"),
-        (4,     300,   "Story Seeker"),
-        (5,     500,   "Novel Navigator"),
-        (6,     750,   "Prose Pathfinder"),
-        (7,     1100,  "Verse Voyager"),
-        (8,     1500,  "Tome Traveler"),
-        (9,     2000,  "Literary Lion"),
-        (10,    2700,  "Saga Scholar"),
-        (11,    3500,  "Epic Explorer"),
-        (12,    4500,  "Canon Keeper"),
-        (13,    5500,  "Spine Master"),
-        (14,    7000,  "Archive Architect"),
-        (15,    9000,  "Grand Librarian"),
+        // Reader tier (L1–5)
+        (1,     0,      "Reader"),
+        (2,     75,     "Page Turner"),
+        (3,     200,    "Chapter Chaser"),
+        (4,     400,    "Story Seeker"),
+        (5,     700,    "Steady Reader"),
+        // Scholar tier (L6–10)
+        (6,     1100,   "Prose Explorer"),
+        (7,     1600,   "Verse Voyager"),
+        (8,     2200,   "Scholar"),
+        (9,     3000,   "Literary Scout"),
+        (10,    4000,   "Tome Traveler"),
+        // Archivist tier (L11–15)
+        (11,    5200,   "Canon Seeker"),
+        (12,    6500,   "Archivist"),
+        (13,    8000,   "Epic Explorer"),
+        (14,    10000,  "Saga Keeper"),
+        (15,    12500,  "Archive Architect"),
+        // Classicist tier (L16–20)
+        (16,    15500,  "Classicist"),
+        (17,    19000,  "Canon Keeper"),
+        (18,    23000,  "Literary Lion"),
+        (19,    28000,  "Grand Reader"),
+        (20,    34000,  "Spine Master"),
+        // Canonmaster tier (L21–25)
+        (21,    41000,  "Canon Climber"),
+        (22,    49000,  "Great Books Sage"),
+        (23,    58000,  "Canonmaster"),
+        (24,    70000,  "Grand Librarian"),
+        (25,    85000,  "Eternal Reader"),
     ]
     
     static func level(for xp: Int) -> Int {
@@ -163,6 +176,6 @@ enum XPLevelTable {
     }
     
     static func xpRequired(for level: Int) -> Int {
-        levels.first(where: { $0.level == level })?.xp ?? 10000
+        levels.first(where: { $0.level == level })?.xp ?? 100000
     }
 }

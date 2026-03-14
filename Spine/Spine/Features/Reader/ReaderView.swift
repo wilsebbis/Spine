@@ -57,6 +57,25 @@ struct ReaderView: View {
     @State private var audioPlaybackEngine = AudioPlaybackEngine()
     @State private var audioTimings: ChapterTimings?
     @State private var isAudioMode = false
+    
+    // Audiobook mini player state
+    @State private var showMiniPlayer = false
+    @State private var currentAudioChapterIndex = 0
+    @State private var showFullAudioPlayer = false
+    @State private var audiobookDownloadService: AudiobookDownloadService?
+    
+    // Audiobook alignment state
+    @State private var alignmentService: AudiobookAlignmentService?
+    @State private var currentChapterTimings: ChapterTimings?
+    @State private var activeWordIndex: Int?
+    @State private var activePhraseRange: ClosedRange<Int>?
+    @State private var playbackTrackingTimer: Timer?
+    
+    // Cached unit state — avoids O(n) re-computation on every body eval
+    @State private var cachedReadableUnits: [ReadingUnit] = []
+    @State private var cachedFirstUnreadOrdinal: Int = 0
+    @State private var cachedVisibleUnits: [ReadingUnit] = []
+    @State private var cachedCompletedCount: Int = 0
 
     
     private var currentSettings: UserSettings? { settings.first }
@@ -117,31 +136,35 @@ struct ReaderView: View {
         book.sortedUnits
     }
     
-    /// Units filtered to exclude front matter, TOC, copyright, etc.
-    private var readableUnits: [ReadingUnit] {
-        sortedUnits.filter { !Self.isFrontMatter($0, bookTitle: book.title) }
-    }
+    /// Units filtered to exclude front matter, TOC, copyright.
+    /// Now reads from cached @State — call refreshUnitState() after mutations.
+    private var readableUnits: [ReadingUnit] { cachedReadableUnits }
     
     /// The ordinal of the first unread unit (the "frontier").
-    private var firstUnreadOrdinal: Int {
-        readableUnits.first(where: { !$0.isCompleted })?.ordinal ?? Int.max
-    }
+    private var firstUnreadOrdinal: Int { cachedFirstUnreadOrdinal }
     
     /// Windowed subset for rendering — only units near the frontier.
-    /// Prevents creating hundreds of UITextViews for large books.
-    private var visibleUnits: [ReadingUnit] {
-        let all = readableUnits
-        guard let frontierIdx = all.firstIndex(where: { $0.ordinal == firstUnreadOrdinal }) else {
-            // All read — show last 10 units
-            return Array(all.suffix(10))
-        }
-        let start = max(0, frontierIdx - 3)     // 3 completed units behind
-        let end = min(all.count, frontierIdx + 8) // 8 ahead (locked, cheap)
-        return Array(all[start..<end])
-    }
+    private var visibleUnits: [ReadingUnit] { cachedVisibleUnits }
     
-    private var completedCount: Int {
-        readableUnits.filter { $0.isCompleted }.count
+    private var completedCount: Int { cachedCompletedCount }
+    
+    /// Recompute unit state snapshots. Call after mutations (mark as read, etc.).
+    private func refreshUnitState() {
+        let all = sortedUnits.filter { !Self.isFrontMatter($0, bookTitle: book.title) }
+        cachedReadableUnits = all
+        
+        let frontier = all.first(where: { !$0.isCompleted })?.ordinal ?? Int.max
+        cachedFirstUnreadOrdinal = frontier
+        
+        if let frontierIdx = all.firstIndex(where: { $0.ordinal == frontier }) {
+            let start = max(0, frontierIdx - 3)
+            let end = min(all.count, frontierIdx + 8)
+            cachedVisibleUnits = Array(all[start..<end])
+        } else {
+            cachedVisibleUnits = Array(all.suffix(10))
+        }
+        
+        cachedCompletedCount = all.filter { $0.isCompleted }.count
     }
     
     // MARK: - Front Matter Detection
@@ -248,12 +271,10 @@ struct ReaderView: View {
                             unitBlock(unit)
                                 .id(unit.id)
                         }
-                        
-                        // Bottom spacer
-                        Spacer(minLength: 100)
                     }
                     .padding(.horizontal, marginSize)
                     .padding(.top, SpineTokens.Spacing.xl)
+                    .padding(.bottom, SpineTokens.Spacing.xl)
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: scrollTarget) { _, newValue in
@@ -272,19 +293,95 @@ struct ReaderView: View {
                 }
             }
             
-            // Full-screen tap to toggle controls
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    withAnimation(SpineTokens.Animation.quick) {
-                        showControls.toggle()
+            // Karaoke highlighting overlay — replaces reader scroll during audiobook sync
+            if showMiniPlayer, let timings = currentChapterTimings {
+                VStack(spacing: 0) {
+                    // Dismissible karaoke header
+                    HStack {
+                        Image(systemName: "waveform")
+                            .foregroundStyle(SpineTokens.Colors.accentGold)
+                        
+                        Text("Audio Sync")
+                            .font(SpineTokens.Typography.caption)
+                            .foregroundStyle(SpineTokens.Colors.espresso)
+                        
+                        if let service = alignmentService {
+                            switch service.state {
+                            case .transcribing(let ch, let total):
+                                Text("Transcribing \(ch)/\(total)…")
+                                    .font(SpineTokens.Typography.caption2)
+                                    .foregroundStyle(SpineTokens.Colors.subtleGray)
+                            case .aligning(let ch, let total):
+                                Text("Aligning \(ch)/\(total)…")
+                                    .font(SpineTokens.Typography.caption2)
+                                    .foregroundStyle(SpineTokens.Colors.subtleGray)
+                            default:
+                                EmptyView()
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        Button {
+                            // Close karaoke — keep playing, just hide the overlay
+                            currentChapterTimings = nil
+                            stopPlaybackTracking()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(SpineTokens.Colors.subtleGray)
+                        }
                     }
+                    .padding(.horizontal, SpineTokens.Spacing.md)
+                    .padding(.vertical, SpineTokens.Spacing.xs)
+                    .background(.ultraThinMaterial)
+                    
+                    // Full karaoke text view with word-level sync
+                    KaraokeTextView(
+                        timings: timings,
+                        currentTime: audioPlaybackEngine.currentTime,
+                        onWordTap: { word in
+                            // Tap a word → seek audio to that position
+                            audioPlaybackEngine.seek(to: word.t0)
+                        }
+                    )
                 }
-                .allowsHitTesting(!showControls)
+                .background(backgroundColor)
+                .transition(.opacity)
+            }
             
-            // Controls overlay
+            // Controls overlay — tap anywhere on the dimmed background to dismiss
             if showControls {
+                Color.black.opacity(0.15)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(SpineTokens.Animation.quick) {
+                            showControls = false
+                        }
+                    }
+                
                 controlsOverlay
+                    .transition(.opacity)
+            } else {
+                // Tap top/bottom strips to show controls (doesn't interfere with text selection)
+                VStack {
+                    Color.clear
+                        .frame(height: 44)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(SpineTokens.Animation.quick) {
+                                showControls = true
+                            }
+                        }
+                    Spacer()
+                    Color.clear
+                        .frame(height: 44)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(SpineTokens.Animation.quick) {
+                                showControls = true
+                            }
+                        }
+                }
             }
         }
         .navigationBarBackButtonHidden(true)
@@ -293,6 +390,7 @@ struct ReaderView: View {
         .statusBarHidden(!showControls)
         .persistentSystemOverlays(showControls ? .automatic : .hidden)
         .onAppear {
+            refreshUnitState()  // Populate cached state before first render
             startSession()
             AnalyticsService.shared.log(.readingUnitOpened, properties: [
                 "bookTitle": book.title,
@@ -306,20 +404,56 @@ struct ReaderView: View {
         .onDisappear {
             endSession()
             audioPlaybackEngine.pause()
+            stopPlaybackTracking()
         }
         .sheet(item: $activeSheet) { sheet in
             sheetContent(sheet)
         }
         .overlay(alignment: .bottom) {
-            // Audio controls bar when audio is active
-            if isAudioMode, let timings = audioTimings {
+            // Audiobook mini player when active
+            if showMiniPlayer {
+                let chapterTitle = currentAudioChapterIndex < book.sortedAudioChapters.count
+                    ? book.sortedAudioChapters[currentAudioChapterIndex].title
+                    : "Chapter \(currentAudioChapterIndex + 1)"
+                AudioMiniPlayerView(
+                    book: book,
+                    player: audioPlaybackEngine,
+                    currentChapterTitle: chapterTitle,
+                    onExpand: {
+                        showFullAudioPlayer = true
+                    },
+                    onDismiss: {
+                        audioPlaybackEngine.pause()
+                        saveAudiobookPosition()
+                        withAnimation { showMiniPlayer = false }
+                    }
+                )
+                .padding(.horizontal, SpineTokens.Spacing.sm)
+                .padding(.bottom, SpineTokens.Spacing.sm)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            // Audio controls bar when uploaded audio sync is active
+            else if isAudioMode, let timings = audioTimings {
                 AudioControlsBar(engine: audioPlaybackEngine, timings: timings)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .fullScreenCover(isPresented: $showFullAudioPlayer) {
+            AudiobookPlayerView(book: book)
+        }
         .overlay {
             if showXPToast, let reward = latestReward {
-                XPToast(reward: reward, isPresented: $showXPToast)
+                XPToast(
+                    reward: reward,
+                    currentStreak: book.readingProgress?.currentStreak ?? 0,
+                    isPresented: $showXPToast,
+                    onContinue: {
+                        // Scroll to next unread unit
+                        if let nextUnit = book.sortedUnits.first(where: { !$0.isCompleted }) {
+                            scrollTarget = nextUnit.id
+                        }
+                    }
+                )
             }
         }
         .fullScreenCover(isPresented: $showCelebration) {
@@ -338,7 +472,7 @@ struct ReaderView: View {
         let isUnlocked = unit.isCompleted || unit.ordinal <= firstUnreadOrdinal
         let isCurrentFrontier = unit.ordinal == firstUnreadOrdinal
         
-        VStack(alignment: .leading, spacing: SpineTokens.Spacing.lg) {
+        VStack(alignment: .leading, spacing: SpineTokens.Spacing.sm) {
             // Unit header
             unitHeader(for: unit)
             
@@ -364,7 +498,7 @@ struct ReaderView: View {
             // Divider between units
             unitDivider(ordinal: unit.ordinal)
         }
-        .padding(.bottom, SpineTokens.Spacing.xl)
+        .padding(.bottom, SpineTokens.Spacing.md)
     }
     
     // MARK: - Unit Header
@@ -396,71 +530,69 @@ struct ReaderView: View {
         }
     }
     
-    // MARK: - Unit Content (paragraphs)
+    // MARK: - Unit Content (single text surface per unit)
     
     private func unitContent(for unit: ReadingUnit) -> some View {
         let paragraphs = filteredParagraphs(for: unit)
+        let joinedText = paragraphs.joined(separator: "\n\n")
         
         let readerFont = readerUIFont
-        
         let readerTextColor: UIColor = UIColor(textColor)
         let spacing = fontSize * (lineHeight - 1)
         let isUnlocked = unit.isCompleted || unit.ordinal <= firstUnreadOrdinal
         
-        return VStack(alignment: .leading, spacing: fontSize * lineHeight * paragraphSpacingMultiplier) {
-            ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, trimmed in
+        return Group {
+            if isUnlocked {
+                // Build all highlight ranges against the joined text
+                let hlRanges: [SelectableTextView.HighlightRange] = unit.highlights
+                    .filter { joinedText.contains($0.selectedText) }
+                    .map { .init(id: $0.id, selectedText: $0.selectedText, colorHex: $0.colorHex) }
                 
-                if isUnlocked {
-                    // Build highlight ranges for this paragraph
-                    let hlRanges: [SelectableTextView.HighlightRange] = unit.highlights
-                        .filter { trimmed.contains($0.selectedText) }
-                        .map { .init(id: $0.id, selectedText: $0.selectedText, colorHex: $0.colorHex) }
-                    
-                    // Interactive text for unlocked units
-                    SelectableTextView(
-                        text: trimmed,
-                        font: readerFont,
-                        textColor: readerTextColor,
-                        lineSpacing: spacing,
-                        highlights: hlRanges,
-                        onHighlight: { selected in
-                            activeUnitID = unit.id
-                            highlightText = selected
-                            activeSheet = .highlight
-                        },
-                        onShareQuote: FeatureFlags.shared.highlightSharing ? { selected in
-                            activeUnitID = unit.id
-                            highlightText = selected
-                            activeSheet = .shareHighlight
-                        } : nil,
-                        onExplain: FeatureFlags.shared.explainParagraph ? { selected in
-                            activeUnitID = unit.id
-                            selectedParagraph = selected
-                            activeSheet = .explainParagraph
-                        } : nil,
-                        onDefineWord: FeatureFlags.shared.defineWord ? { selected in
-                            activeUnitID = unit.id
-                            selectedWord = selected
-                            selectedParagraph = trimmed
-                            activeSheet = .defineWord
-                        } : nil,
-                        onTapHighlight: { highlightID in
-                            tappedHighlightID = highlightID
-                            activeSheet = .editHighlight
-                        }
+                // ONE interactive text view per unit (not per paragraph)
+                SelectableTextView(
+                    text: joinedText,
+                    font: readerFont,
+                    textColor: readerTextColor,
+                    lineSpacing: spacing,
+                    highlights: hlRanges,
+                    onHighlight: { selected in
+                        activeUnitID = unit.id
+                        highlightText = selected
+                        activeSheet = .highlight
+                    },
+                    onShareQuote: FeatureFlags.shared.highlightSharing ? { selected in
+                        activeUnitID = unit.id
+                        highlightText = selected
+                        activeSheet = .shareHighlight
+                    } : nil,
+                    onExplain: FeatureFlags.shared.explainParagraph ? { selected in
+                        activeUnitID = unit.id
+                        selectedParagraph = selected
+                        activeSheet = .explainParagraph
+                    } : nil,
+                    onDefineWord: FeatureFlags.shared.defineWord ? { selected in
+                        activeUnitID = unit.id
+                        selectedWord = selected
+                        // Find the paragraph containing the selected word
+                        selectedParagraph = paragraphs.first(where: { $0.contains(selected) }) ?? selected
+                        activeSheet = .defineWord
+                    } : nil,
+                    onTapHighlight: { highlightID in
+                        tappedHighlightID = highlightID
+                        activeSheet = .editHighlight
+                    }
+                )
+                // Height determined by SpineTextView.intrinsicContentSize — no fixedSize needed
+            } else {
+                // Static text for locked units — lightweight SwiftUI Text
+                Text(joinedText)
+                    .font(useSerif ?
+                        SpineTokens.Typography.readerSerif(size: fontSize) :
+                        .system(size: fontSize)
                     )
-                    .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    // Static text for locked units (no interaction)
-                    Text(trimmed)
-                        .font(useSerif ?
-                            SpineTokens.Typography.readerSerif(size: fontSize) :
-                            .system(size: fontSize)
-                        )
-                        .foregroundStyle(textColor)
-                        .lineSpacing(spacing)
-                        .allowsHitTesting(false)
-                }
+                    .foregroundStyle(textColor)
+                    .lineSpacing(spacing)
+                    .allowsHitTesting(false)
             }
         }
     }
@@ -502,20 +634,40 @@ struct ReaderView: View {
             .background(SpineTokens.Colors.accentGold)
             .clipShape(RoundedRectangle(cornerRadius: SpineTokens.Radius.medium))
         }
-        .padding(.top, SpineTokens.Spacing.md)
+        .padding(.top, SpineTokens.Spacing.xs)
     }
     
     // MARK: - Completed Badge + Post-Completion Actions
     
     private func completedBadge(for unit: ReadingUnit) -> some View {
         VStack(spacing: SpineTokens.Spacing.md) {
-            // Completed indicator
+            // Completed indicator with reading time
             HStack(spacing: SpineTokens.Spacing.xs) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(SpineTokens.Colors.successGreen)
                 Text("Completed")
                     .font(SpineTokens.Typography.caption)
                     .foregroundStyle(SpineTokens.Colors.successGreen)
+                
+                if let minutes = unit.readingTimeMinutes, minutes > 0 {
+                    Text("·")
+                        .foregroundStyle(SpineTokens.Colors.subtleGray)
+                    
+                    HStack(spacing: 2) {
+                        Image(systemName: "clock.fill")
+                            .font(.system(size: 10))
+                        if minutes >= 60 {
+                            let h = Int(minutes) / 60
+                            let m = Int(minutes) % 60
+                            Text(m > 0 ? "\(h)h \(m)m" : "\(h)h")
+                                .font(SpineTokens.Typography.caption)
+                        } else {
+                            Text("\(Int(ceil(minutes)))m")
+                                .font(SpineTokens.Typography.caption)
+                        }
+                    }
+                    .foregroundStyle(SpineTokens.Colors.subtleGray)
+                }
             }
             
             // Post-chapter action buttons
@@ -610,7 +762,7 @@ struct ReaderView: View {
         switch sheet {
         case .settings:
             ReaderSettingsView()
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.medium])
         case .reaction:
             ReactionSheet(book: book, unit: interactedUnit) {}
                 .presentationDetents([.medium])
@@ -697,23 +849,8 @@ struct ReaderView: View {
                         activeSheet = .codex
                     }
                     
-                    // Audio sync (headphones icon)
-                    controlButton(icon: audioTimings != nil ? "headphones" : "headphones.circle") {
-                        if audioTimings != nil {
-                            // Toggle audio mode
-                            isAudioMode.toggle()
-                            if isAudioMode {
-                                if let url = audioSyncService.audioFileURL(for: book.id) {
-                                    try? audioPlaybackEngine.load(url: url)
-                                    audioPlaybackEngine.play()
-                                }
-                            } else {
-                                audioPlaybackEngine.pause()
-                            }
-                        } else {
-                            activeSheet = .audioSync
-                        }
-                    }
+                    // Audio sync / audiobook (headphones icon)
+                    audiobookHeadphonesButton
                     
                     controlButton(icon: "textformat.size") {
                         activeSheet = .settings
@@ -748,6 +885,94 @@ struct ReaderView: View {
             }
             .padding(.horizontal, SpineTokens.Spacing.xl)
             .padding(.bottom, SpineTokens.Spacing.md)
+        }
+    }
+    
+    // MARK: - Audiobook Headphones Button (3 states)
+    
+    @ViewBuilder
+    private var audiobookHeadphonesButton: some View {
+        let downloadState = audiobookDownloadService?.state(for: book.id) ?? .idle
+        
+        if book.hasAudiobook {
+            // State 1: Audiobook already downloaded → toggle mini player
+            controlButton(icon: showMiniPlayer ? "headphones" : "headphones.circle") {
+                if showMiniPlayer {
+                    audioPlaybackEngine.pause()
+                    showMiniPlayer = false
+                } else {
+                    startAudiobookPlayback()
+                }
+            }
+        } else if case .fetching = downloadState {
+            // Downloading: show spinner
+            ProgressView()
+                .tint(textColor)
+                .padding(SpineTokens.Spacing.xs)
+                .glassEffect(.regular, in: Circle())
+        } else if case .downloading(let chapter, let total) = downloadState {
+            // Downloading: show progress
+            VStack(spacing: 2) {
+                Image(systemName: "arrow.down.circle")
+                    .font(.system(size: 12))
+                    .foregroundStyle(textColor)
+                Text("\(chapter)/\(total)")
+                    .font(.system(size: 8, weight: .bold).monospacedDigit())
+                    .foregroundStyle(textColor)
+            }
+            .padding(SpineTokens.Spacing.xs)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 8))
+        } else if case .notAvailable = downloadState {
+            // Not available on LibriVox
+            controlButton(icon: "headphones") {
+                // Show import sheet as fallback
+                activeSheet = .audioSync
+            }
+            .opacity(0.4)
+        } else if audioTimings != nil {
+            // State 2: Has uploaded audio sync timings → toggle audio mode
+            controlButton(icon: isAudioMode ? "headphones" : "headphones.circle") {
+                isAudioMode.toggle()
+                if isAudioMode {
+                    if let url = audioSyncService.audioFileURL(for: book.id) {
+                        try? audioPlaybackEngine.load(url: url)
+                        audioPlaybackEngine.play()
+                    }
+                } else {
+                    audioPlaybackEngine.pause()
+                }
+            }
+        } else {
+            // State 3: No audiobook → offer download or import
+            Menu {
+                Button {
+                    // Download audiobook from LibriVox
+                    if audiobookDownloadService == nil {
+                        audiobookDownloadService = AudiobookDownloadService(modelContext: modelContext)
+                    }
+                    Task {
+                        await audiobookDownloadService?.downloadAudiobook(for: book)
+                        // If download succeeded, auto-start playback
+                        if book.hasAudiobook {
+                            startAudiobookPlayback()
+                        }
+                    }
+                } label: {
+                    Label("Download from LibriVox", systemImage: "arrow.down.circle")
+                }
+                
+                Button {
+                    activeSheet = .audioSync
+                } label: {
+                    Label("Import Audio File", systemImage: "doc.badge.plus")
+                }
+            } label: {
+                Image(systemName: "headphones.circle")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(textColor)
+                    .padding(SpineTokens.Spacing.xs)
+            }
+            .glassEffect(.regular, in: Circle())
         }
     }
     
@@ -979,6 +1204,13 @@ struct ReaderView: View {
                 ForEach(readableUnits, id: \.id) { unit in
                     Button {
                         activeSheet = nil
+                        // Re-center viewport window around the tapped chapter
+                        let all = cachedReadableUnits
+                        if let idx = all.firstIndex(where: { $0.id == unit.id }) {
+                            let start = max(0, idx - 3)
+                            let end = min(all.count, idx + 8)
+                            cachedVisibleUnits = Array(all[start..<end])
+                        }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                             scrollTarget = unit.id
                         }
@@ -1060,6 +1292,147 @@ struct ReaderView: View {
     
     // MARK: - Session Management
     
+    // MARK: - Audiobook Playback (Downloaded Chapters)
+    
+    private func startAudiobookPlayback() {
+        let chapters = book.sortedAudioChapters.filter { $0.isDownloaded }
+        guard !chapters.isEmpty else { return }
+        
+        // Trigger alignment if not yet done
+        if !AudiobookAlignmentService.hasAlignment(for: book) && book.isDownloaded {
+            triggerAlignment()
+        }
+        
+        // Resume from last played chapter, or start at first
+        if let resumeIndex = chapters.firstIndex(where: { $0.lastPlaybackPosition > 0 && !$0.isListened }) {
+            currentAudioChapterIndex = resumeIndex
+        } else {
+            // Try to match current reading position to chapter ordinal
+            let currentUnitOrdinal = initialUnit.ordinal
+            let chapterCount = chapters.count
+            let unitCount = max(book.unitCount, 1)
+            let mappedIndex = (currentUnitOrdinal * chapterCount) / unitCount
+            currentAudioChapterIndex = min(max(0, mappedIndex), chapterCount - 1)
+        }
+        
+        loadAudioChapter(at: currentAudioChapterIndex)
+        withAnimation { showMiniPlayer = true }
+    }
+    
+    private func loadAudioChapter(at index: Int) {
+        let chapters = book.sortedAudioChapters.filter { $0.isDownloaded }
+        guard index >= 0, index < chapters.count,
+              let url = chapters[index].localFileURL else { return }
+        
+        currentAudioChapterIndex = index
+        let chapter = chapters[index]
+        
+        // Load alignment timings for this chapter if available
+        currentChapterTimings = chapter.timings
+        activeWordIndex = nil
+        activePhraseRange = nil
+        
+        do {
+            audioPlaybackEngine.startOffset = chapter.startOffset
+            try audioPlaybackEngine.load(url: url)
+            
+            // Resume from saved position if available
+            if chapter.lastPlaybackPosition > chapter.startOffset {
+                audioPlaybackEngine.seek(to: chapter.lastPlaybackPosition)
+            }
+            
+            audioPlaybackEngine.play()
+            startPlaybackTracking()
+            
+            // Set up chapter completion handler → advance to next
+            audioPlaybackEngine.onTrackFinished = { [self] in
+                stopPlaybackTracking()
+                saveAudiobookPosition()
+                markChapterListened(at: index)
+                let nextIndex = index + 1
+                if nextIndex < chapters.count {
+                    loadAudioChapter(at: nextIndex)
+                } else {
+                    withAnimation { showMiniPlayer = false }
+                }
+            }
+        } catch {
+            print("⚠️ Failed to load audio chapter: \(error)")
+        }
+    }
+    
+    private func saveAudiobookPosition() {
+        let chapters = book.sortedAudioChapters.filter { $0.isDownloaded }
+        guard currentAudioChapterIndex < chapters.count else { return }
+        let chapter = chapters[currentAudioChapterIndex]
+        chapter.lastPlaybackPosition = audioPlaybackEngine.currentTime
+        try? modelContext.save()
+    }
+    
+    private func markChapterListened(at index: Int) {
+        let chapters = book.sortedAudioChapters.filter { $0.isDownloaded }
+        guard index < chapters.count else { return }
+        chapters[index].isListened = true
+        chapters[index].lastPlaybackPosition = 0
+        try? modelContext.save()
+    }
+    
+    // MARK: - Playback Tracking (Alignment-Aware)
+    
+    private func startPlaybackTracking() {
+        stopPlaybackTracking()
+        
+        guard currentChapterTimings != nil else { return }
+        
+        // Poll at ~5Hz for smooth word tracking
+        playbackTrackingTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [self] _ in
+            Task { @MainActor in
+                updatePlaybackHighlight()
+            }
+        }
+    }
+    
+    private func stopPlaybackTracking() {
+        playbackTrackingTimer?.invalidate()
+        playbackTrackingTimer = nil
+        activeWordIndex = nil
+        activePhraseRange = nil
+    }
+    
+    private func updatePlaybackHighlight() {
+        guard let timings = currentChapterTimings else { return }
+        
+        let currentTime = audioPlaybackEngine.currentTime
+        
+        // Find active word
+        if let wordIdx = timings.activeWordIndex(at: currentTime) {
+            activeWordIndex = wordIdx
+            
+            // Find containing phrase
+            if let phrase = timings.phraseContaining(wordIndex: wordIdx) {
+                activePhraseRange = phrase.start...phrase.end
+            }
+        }
+    }
+    
+    private func triggerAlignment() {
+        guard alignmentService == nil else { return }
+        alignmentService = AudiobookAlignmentService(modelContext: modelContext)
+        
+        Task {
+            await alignmentService?.alignBook(book)
+            
+            // Reload timings for current chapter after alignment completes
+            let chapters = book.sortedAudioChapters.filter { $0.isDownloaded }
+            if currentAudioChapterIndex < chapters.count {
+                currentChapterTimings = chapters[currentAudioChapterIndex].timings
+                if currentChapterTimings != nil {
+                    startPlaybackTracking()
+                }
+            }
+        }
+    }
+    
     private func startSession() {
         sessionStartTime = Date()
         let tracker = ProgressTracker(modelContext: modelContext)
@@ -1122,7 +1495,16 @@ struct ReaderView: View {
             "minutesSpent": String(format: "%.1f", minutes)
         ])
         
-
+        // Refresh cached unit state — anchor scroll to avoid jump
+        let anchorID = unit.id
+        refreshUnitState()
+        scrollTarget = anchorID
+        
+        // Incremental intelligence update (background, non-blocking)
+        if let intelligence = book.intelligence {
+            let intelligenceService = BookIntelligenceService()
+            intelligenceService.processIncrementalUnit(unit, book: book, intelligence: intelligence)
+        }
     }
     
     private func ensureXPProfile() -> XPProfile {

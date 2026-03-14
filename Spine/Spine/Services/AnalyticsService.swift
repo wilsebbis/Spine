@@ -54,7 +54,10 @@ final class AnalyticsService: Sendable {
         case characterGraphViewed = "character_graph_viewed"
         case xrayOpened = "xray_opened"
         
-        // Audio Sync
+        // Audio
+        case audiobookDownloadStarted = "audiobook_download_started"
+        case audiobookDownloadCompleted = "audiobook_download_completed"
+        case audiobookPlaybackStarted = "audiobook_playback_started"
         case audioSyncCompleted = "audio_sync_completed"
         
         // Social (Phase 4)

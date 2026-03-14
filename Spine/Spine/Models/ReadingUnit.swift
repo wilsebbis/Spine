@@ -45,6 +45,9 @@ final class ReadingUnit {
     /// When this unit was completed.
     var completedAt: Date?
     
+    /// Actual reading time in minutes for this unit.
+    var readingTimeMinutes: Double?
+    
     /// User's private notes/micro-review for this unit.
     var privateNotes: String?
     
