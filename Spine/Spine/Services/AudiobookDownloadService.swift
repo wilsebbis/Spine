@@ -111,14 +111,26 @@ final class AudiobookDownloadService {
                     continue
                 }
                 
-                // Download with retry
+                // Download with retry + exponential backoff
                 var downloaded = false
                 for attempt in 1...3 {
                     do {
-                        let (tempURL, response) = try await URLSession.shared.download(from: mp3URL)
+                        var request = URLRequest(url: mp3URL)
+                        request.timeoutInterval = 60
+                        request.setValue(
+                            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Spine/1.0",
+                            forHTTPHeaderField: "User-Agent"
+                        )
                         
-                        guard let httpResponse = response as? HTTPURLResponse,
-                              (200...299).contains(httpResponse.statusCode) else {
+                        let (tempURL, response) = try await URLSession.shared.download(for: request)
+                        
+                        guard let httpResponse = response as? HTTPURLResponse else {
+                            print("⚠️ Chapter \(index + 1) attempt \(attempt): non-HTTP response")
+                            continue
+                        }
+                        
+                        guard (200...299).contains(httpResponse.statusCode) else {
+                            print("⚠️ Chapter \(index + 1) attempt \(attempt): HTTP \(httpResponse.statusCode)")
                             continue
                         }
                         
@@ -126,8 +138,10 @@ final class AudiobookDownloadService {
                         downloaded = true
                         break
                     } catch {
+                        print("⚠️ Chapter \(index + 1) attempt \(attempt): \(error.localizedDescription)")
                         if attempt < 3 {
-                            try? await Task.sleep(for: .seconds(1))
+                            let delay = pow(2.0, Double(attempt))  // 2s, 4s
+                            try? await Task.sleep(for: .seconds(delay))
                         }
                     }
                 }
@@ -135,7 +149,7 @@ final class AudiobookDownloadService {
                 if downloaded {
                     updateChapterLocalFile(book: book, ordinal: index + 1, fileName: fileName)
                 } else {
-                    print("⚠️ Failed to download chapter \(index + 1): \(chapter.title)")
+                    print("⚠️ Failed to download chapter \(index + 1) after 3 attempts: \(chapter.title)")
                 }
             }
             
@@ -151,7 +165,7 @@ final class AudiobookDownloadService {
             
         } catch {
             bookStates[bookId] = .failed(error.localizedDescription)
-            print("⚠️ Audiobook download failed: \(error.localizedDescription)")
+            print("⚠️ Audiobook download failed for \(book.title): \(error.localizedDescription)")
         }
     }
     

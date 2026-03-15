@@ -911,17 +911,23 @@ struct ReaderView: View {
                 .padding(SpineTokens.Spacing.xs)
                 .glassEffect(.regular, in: Circle())
         } else if case .downloading(let chapter, let total) = downloadState {
-            // Downloading: show progress
-            VStack(spacing: 2) {
-                Image(systemName: "arrow.down.circle")
-                    .font(.system(size: 12))
-                    .foregroundStyle(textColor)
-                Text("\(chapter)/\(total)")
-                    .font(.system(size: 8, weight: .bold).monospacedDigit())
+            // Downloading: circular progress with headphones icon
+            let progress = Double(chapter) / Double(max(total, 1))
+            ZStack {
+                Circle()
+                    .stroke(textColor.opacity(0.2), lineWidth: 2)
+                    .frame(width: 28, height: 28)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(SpineTokens.Colors.accentGold, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .frame(width: 28, height: 28)
+                    .rotationEffect(.degrees(-90))
+                Image(systemName: "headphones")
+                    .font(.system(size: 11))
                     .foregroundStyle(textColor)
             }
             .padding(SpineTokens.Spacing.xs)
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 8))
+            .glassEffect(.regular, in: Circle())
         } else if case .notAvailable = downloadState {
             // Not available on LibriVox
             controlButton(icon: "headphones") {

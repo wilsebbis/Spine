@@ -51,13 +51,14 @@ struct CatalogView: View {
                 .padding(.vertical, SpineTokens.Spacing.md)
             }
             .background(SpineTokens.Colors.cream.ignoresSafeArea())
-            .searchable(text: $searchText, prompt: selectedTab == .books
+            .searchable(text: $searchText, placement: .toolbar, prompt: selectedTab == .books
                         ? "Search \(catalog.totalBooks.formatted()) books or ask anything…"
                         : "Search \(catalog.totalAudiobooks.formatted()) audiobooks or ask anything…")
             .onChange(of: searchText) { _, query in
                 performSmartSearch(query: query)
             }
-            .navigationBarHidden(true)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.visible, for: .navigationBar)
             .onAppear {
                 if downloadService == nil {
                     downloadService = DownloadService(modelContext: modelContext)
@@ -306,7 +307,8 @@ struct CatalogView: View {
                             CatalogBookCard(
                                 book: book,
                                 isInLibrary: libraryGutenbergIds.contains(book.gutenbergId),
-                                hasAudiobook: catalog.librivoxIds.contains(book.ebook_id)
+                                hasAudiobook: catalog.librivoxIds.contains(book.ebook_id),
+                                useSquareLayout: audiobooksOnly
                             )
                         }
                         .buttonStyle(.plain)
@@ -346,7 +348,8 @@ struct CatalogView: View {
                         CatalogBookCard(
                             book: book,
                             isInLibrary: libraryGutenbergIds.contains(book.gutenbergId),
-                            hasAudiobook: true
+                            hasAudiobook: true,
+                            useSquareLayout: true
                         )
                     }
                     .buttonStyle(.plain)
@@ -700,6 +703,8 @@ struct CatalogBookDetailView: View {
     
     // MARK: - Actions
     
+    @State private var isDownloadingAudiobook = false
+    
     private var actionButtons: some View {
         VStack(spacing: SpineTokens.Spacing.sm) {
             if !isInLibrary {
@@ -728,6 +733,25 @@ struct CatalogBookDetailView: View {
                 .padding(.vertical, 14)
                 .background(Color.green.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: SpineTokens.Radius.medium))
+            }
+            
+            // Download Audiobook (standalone)
+            if hasAudiobook {
+                Button {
+                    downloadAudiobook()
+                } label: {
+                    Label(
+                        isDownloadingAudiobook ? "Downloading Audiobook…" : "Download Audiobook",
+                        systemImage: isDownloadingAudiobook ? "arrow.down.circle" : "headphones"
+                    )
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(SpineTokens.Colors.espresso)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: SpineTokens.Radius.medium))
+                }
+                .disabled(isDownloadingAudiobook)
             }
             
             // Open on Gutenberg
@@ -832,10 +856,43 @@ struct CatalogBookDetailView: View {
     
     private func downloadEPUB() {
         isDownloading = true
-        // Use the download service to fetch the book
         guard let service = downloadService else {
             isDownloading = false
             return
+        }
+        
+        let newBook = findOrCreateLibraryBook()
+        
+        Task {
+            await service.download(book: newBook)
+            isDownloading = false
+        }
+    }
+    
+    private func downloadAudiobook() {
+        isDownloadingAudiobook = true
+        guard let service = audiobookDownloadService else {
+            isDownloadingAudiobook = false
+            return
+        }
+        
+        let existingBook = findOrCreateLibraryBook()
+        
+        Task {
+            await service.downloadAudiobook(for: existingBook)
+            isDownloadingAudiobook = false
+        }
+    }
+    
+    /// Find existing library book by gutenbergId, or create a new one.
+    private func findOrCreateLibraryBook() -> Book {
+        // Check if already in library
+        let gid = book.gutenbergId
+        let descriptor = FetchDescriptor<Book>(
+            predicate: #Predicate<Book> { $0.gutenbergId == gid }
+        )
+        if let existing = try? modelContext.fetch(descriptor).first {
+            return existing
         }
         
         let newBook = Book(
@@ -845,11 +902,7 @@ struct CatalogBookDetailView: View {
         )
         modelContext.insert(newBook)
         try? modelContext.save()
-        
-        Task {
-            await service.download(book: newBook)
-            isDownloading = false
-        }
+        return newBook
     }
 }
 
@@ -913,6 +966,9 @@ struct CatalogBookCard: View {
     let book: GutenbergCatalogBook
     let isInLibrary: Bool
     let hasAudiobook: Bool
+    var useSquareLayout: Bool = false
+
+    private var coverHeight: CGFloat { useSquareLayout ? 110 : 165 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: SpineTokens.Spacing.xs) {
@@ -928,7 +984,8 @@ struct CatalogBookCard: View {
                             .overlay { ProgressView().tint(SpineTokens.Colors.accentGold) }
                     }
                 }
-                .frame(width: 110, height: 165)
+                .frame(width: 110, height: coverHeight)
+                .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: SpineTokens.Radius.small))
                 .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
 
