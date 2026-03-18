@@ -16,6 +16,12 @@ final class XPProfile {
     var weeklyXP: Int
     var weeklyXPReset: Date
     
+    // MARK: - Economy
+    var pages: Int
+    var dailyPassesBoughtToday: Int
+    var dailyPassesDate: Date
+    var unitsReadToday: Int
+    
     // MARK: - Speed
     var averageWPM: Double
     var totalReadingSessions: Int      // for rolling average
@@ -58,6 +64,10 @@ final class XPProfile {
     init() {
         self.id = UUID()
         self.totalXP = 0
+        self.pages = 0
+        self.dailyPassesBoughtToday = 0
+        self.dailyPassesDate = Calendar.current.startOfDay(for: Date())
+        self.unitsReadToday = 0
         self.dailyXP = 0
         self.dailyXPDate = Calendar.current.startOfDay(for: Date())
         self.weeklyXP = 0
@@ -125,6 +135,33 @@ final class XPProfile {
     
     func hasAchievement(_ id: String) -> Bool {
         unlockedAchievementIDs.contains(id)
+    }
+    
+    // MARK: - Economy Transactions
+    
+    func resetDailyPassesIfNeeded() {
+        let today = Calendar.current.startOfDay(for: Date())
+        if dailyPassesDate < today {
+            dailyPassesBoughtToday = 0
+            unitsReadToday = 0
+            dailyPassesDate = today
+        }
+    }
+    
+    func addPages(_ amount: Int) {
+        guard amount > 0 else { return }
+        pages += amount
+    }
+    
+    func incrementUnitsReadToday() {
+        resetDailyPassesIfNeeded()
+        unitsReadToday += 1
+    }
+    
+    func spendPages(_ amount: Int) -> Bool {
+        guard amount > 0, pages >= amount else { return false }
+        pages -= amount
+        return true
     }
 }
 

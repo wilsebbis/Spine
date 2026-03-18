@@ -340,17 +340,17 @@ private enum OPFParser {
         return (metadata, manifest, spineRefs)
     }
     
-    private static func extractTag(_ tag: String, from xml: String) -> String? {
+    nonisolated private static func extractTag(_ tag: String, from xml: String) -> String? {
         let pattern = "<\(tag)[^>]*>([^<]+)</\(tag)>"
         return matchPattern(pattern, in: xml)
     }
     
-    private static func extractAttr(_ attr: String, from text: String) -> String? {
+    nonisolated private static func extractAttr(_ attr: String, from text: String) -> String? {
         let pattern = #"\#(attr)\s*=\s*"([^"]*)""#
         return matchPattern(pattern, in: text)
     }
     
-    private static func matchPattern(_ pattern: String, in text: String) -> String? {
+    nonisolated private static func matchPattern(_ pattern: String, in text: String) -> String? {
         guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return nil }
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         guard let match = regex.firstMatch(in: text, range: range),

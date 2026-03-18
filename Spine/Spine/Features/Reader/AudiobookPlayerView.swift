@@ -617,7 +617,8 @@ struct AudiobookPlayerView: View {
             didLevelUp: false,
             previousLevel: profile.currentLevel,
             newLevel: profile.currentLevel,
-            newAchievements: []
+            newAchievements: [],
+            pagesEarned: 0
         )
         
         try? modelContext.save()

@@ -23,6 +23,7 @@ struct ProfileView: View {
     @State private var showingVocabulary = false
     @State private var showingPaywall = false
     @State private var showingReferral = false
+    @State private var showingStorefront = false
     
     var body: some View {
         NavigationStack {
@@ -91,6 +92,9 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showingReferral) {
                 ReferralView()
+            }
+            .sheet(isPresented: $showingStorefront) {
+                StorefrontView()
             }
         }
     }
@@ -479,6 +483,34 @@ struct ProfileView: View {
                 .font(SpineTokens.Typography.headline)
                 .foregroundStyle(SpineTokens.Colors.espresso)
             
+            // Reading Diary
+            NavigationLink {
+                ReadingDiaryView()
+            } label: {
+                HStack(spacing: SpineTokens.Spacing.sm) {
+                    Image(systemName: "book.pages.fill")
+                        .font(.body)
+                        .foregroundStyle(SpineTokens.Colors.streakFlame)
+                        .frame(width: 32)
+                    
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Reading Diary")
+                            .font(SpineTokens.Typography.caption2)
+                            .foregroundStyle(SpineTokens.Colors.espresso)
+                        Text("Your finished books & reviews")
+                            .font(.system(size: 10))
+                            .foregroundStyle(SpineTokens.Colors.subtleGray)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(SpineTokens.Colors.warmStone)
+                }
+            }
+            .buttonStyle(.plain)
+            
             // Vocabulary Deck
             actionRow(
                 icon: "text.book.closed.fill",
@@ -514,6 +546,16 @@ struct ProfileView: View {
                         .font(.caption2)
                         .foregroundStyle(SpineTokens.Colors.warmStone)
                 }
+            }
+            
+            // Economy Storefront
+            actionRow(
+                icon: "book.pages.fill",
+                label: "Store",
+                subtitle: "Spend your earned Pages",
+                color: SpineTokens.Colors.accentGold
+            ) {
+                showingStorefront = true
             }
             
             // Premium

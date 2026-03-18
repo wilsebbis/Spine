@@ -12,7 +12,9 @@ struct TodayView: View {
     @Query private var xpProfiles: [XPProfile]
     
     @State private var showingReader = false
+    @State private var showingPhysicalTracker = false
     @State private var activeBook: Book?
+    @State private var activePhysicalBook: Book?
     @State private var activeUnit: ReadingUnit?
     
     private var currentSettings: UserSettings? { settings.first }
@@ -43,12 +45,22 @@ struct TodayView: View {
                         xpStatsRow(profile: profile)
                     }
                     
-                    if let book = activeReadingBook, let unit = todayUnit {
-                        // MARK: - Today's Reading Card
-                        todayCard(book: book, unit: unit)
-                        
-                        // MARK: - Progress Section
-                        progressSection(book: book)
+                    if let book = activeReadingBook {
+                        if book.isPhysicalBook {
+                            // MARK: - Physical Book Card
+                            physicalBookCard(book: book)
+                            
+                            // MARK: - Progress Section
+                            progressSection(book: book)
+                        } else if let unit = todayUnit {
+                            // MARK: - Today's Reading Card
+                            todayCard(book: book, unit: unit)
+                            
+                            // MARK: - Progress Section
+                            progressSection(book: book)
+                        } else {
+                            emptyState
+                        }
                     } else {
                         emptyState
                     }
@@ -61,6 +73,11 @@ struct TodayView: View {
             .navigationDestination(isPresented: $showingReader) {
                 if let book = activeBook, let unit = activeUnit {
                     ReaderView(book: book, initialUnit: unit)
+                }
+            }
+            .sheet(isPresented: $showingPhysicalTracker) {
+                if let book = activePhysicalBook {
+                    PhysicalBookTrackerView(book: book)
                 }
             }
         }
@@ -269,6 +286,93 @@ struct TodayView: View {
                 .padding(.vertical, SpineTokens.Spacing.sm)
                 .background(SpineTokens.Colors.espresso)
                 .clipShape(RoundedRectangle(cornerRadius: SpineTokens.Radius.medium))
+            }
+        }
+        .padding(SpineTokens.Spacing.md)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: SpineTokens.Radius.xl))
+    }
+    
+    // MARK: - Physical Book Card
+    
+    private func physicalBookCard(book: Book) -> some View {
+        VStack(spacing: SpineTokens.Spacing.md) {
+            // Book info
+            HStack(alignment: .top, spacing: SpineTokens.Spacing.md) {
+                // Cover
+                if let coverData = book.coverImageData,
+                   let uiImage = UIImage(data: coverData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 60, height: 88)
+                        .clipShape(RoundedRectangle(cornerRadius: SpineTokens.Radius.small))
+                } else {
+                    BookCoverPlaceholder(
+                        title: book.title,
+                        author: book.author,
+                        size: CGSize(width: 60, height: 88)
+                    )
+                }
+                
+                VStack(alignment: .leading, spacing: SpineTokens.Spacing.xxs) {
+                    Text(book.title)
+                        .font(SpineTokens.Typography.headline)
+                        .foregroundStyle(SpineTokens.Colors.espresso)
+                        .lineLimit(2)
+                    
+                    Text(book.author)
+                        .font(SpineTokens.Typography.callout)
+                        .foregroundStyle(SpineTokens.Colors.subtleGray)
+                    
+                    Spacer()
+                    
+                    // Chapter info
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Chapter \(book.physicalCurrentChapter + 1) of \(book.totalPhysicalChapters)")
+                            .font(SpineTokens.Typography.caption2)
+                            .foregroundStyle(SpineTokens.Colors.espresso)
+                    }
+                    
+                    HStack(spacing: SpineTokens.Spacing.sm) {
+                        Label("Avg 5 min", systemImage: "clock")
+                            .font(SpineTokens.Typography.caption2)
+                            .foregroundStyle(SpineTokens.Colors.accentGold)
+                        
+                        Label("+25 XP", systemImage: "star.fill")
+                            .font(SpineTokens.Typography.caption2)
+                            .foregroundStyle(SpineTokens.Colors.accentAmber)
+                    }
+                }
+                
+                Spacer()
+            }
+            
+            // Streak recovery message
+            if let progress = book.readingProgress,
+               progress.currentStreak == 1,
+               (progress.completedUnitCount ?? 0) > 1 {
+                Text("You're rebuilding your streak")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(SpineTokens.Colors.streakFlame)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            
+            // Big Green Button (Well, accent gold for Spine)
+            Button {
+                activePhysicalBook = book
+                showingPhysicalTracker = true
+            } label: {
+                HStack {
+                    Image(systemName: "timer")
+                    Text("Log Pages for \(book.title)")
+                        .font(SpineTokens.Typography.headline)
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, SpineTokens.Spacing.md)
+                .background(SpineTokens.Colors.successGreen) // The Big Green Button
+                .clipShape(RoundedRectangle(cornerRadius: SpineTokens.Radius.medium))
+                .shadow(color: SpineTokens.Colors.successGreen.opacity(0.3), radius: 8, y: 4)
             }
         }
         .padding(SpineTokens.Spacing.md)

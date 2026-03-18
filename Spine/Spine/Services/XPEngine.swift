@@ -18,6 +18,7 @@ struct XPReward: Sendable {
     let previousLevel: Int
     let newLevel: Int
     let newAchievements: [Achievement]
+    let pagesEarned: Int
     
     /// Formatted breakdown for toast display
     var breakdownLines: [String] {
@@ -27,6 +28,7 @@ struct XPReward: Sendable {
         if speedBonus > 0 { lines.append("+\(speedBonus) speed bonus 💨") }
         if firstOfDayBonus > 0 { lines.append("+\(firstOfDayBonus) daily kickstart ☀️") }
         if bookFinishBonus > 0 { lines.append("+\(bookFinishBonus) book complete 📖") }
+        if pagesEarned > 0 { lines.append("+\(pagesEarned) Pages 🪙") }
         return lines
     }
 }
@@ -73,7 +75,7 @@ struct XPEngine {
                 firstOfDayBonus: 0, bookFinishBonus: 0,
                 wpm: 0, didLevelUp: false,
                 previousLevel: previousLevel, newLevel: previousLevel,
-                newAchievements: []
+                newAchievements: [], pagesEarned: 0
             )
         }
         
@@ -130,6 +132,11 @@ struct XPEngine {
             readingHour: hour
         )
         
+        // Calculate soft currency (Pages)
+        // e.g., 5 base + 1 per streak day + 50 for finishing book
+        let pagesEarned = 5 + min(currentStreak, 10) + (bookFinishBonus > 0 ? 50 : 0)
+        profile.addPages(pagesEarned)
+        
         return XPReward(
             baseXP: baseXP,
             streakBonus: streakBonus,
@@ -140,7 +147,8 @@ struct XPEngine {
             didLevelUp: didLevelUp,
             previousLevel: previousLevel,
             newLevel: newLevel,
-            newAchievements: newAchievements
+            newAchievements: newAchievements,
+            pagesEarned: pagesEarned
         )
     }
     
@@ -196,6 +204,10 @@ struct XPEngine {
             readingHour: hour
         )
         
+        // Award soft currency
+        let pagesEarned = 5 + min(currentStreak, 10) + (bookFinishBonus > 0 ? 50 : 0)
+        profile.addPages(pagesEarned)
+        
         return XPReward(
             baseXP: baseXP,
             streakBonus: streakBonus,
@@ -206,7 +218,8 @@ struct XPEngine {
             didLevelUp: didLevelUp,
             previousLevel: previousLevel,
             newLevel: newLevel,
-            newAchievements: newAchievements
+            newAchievements: newAchievements,
+            pagesEarned: pagesEarned
         )
     }
 }

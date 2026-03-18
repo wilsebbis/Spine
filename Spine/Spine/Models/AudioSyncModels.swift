@@ -4,7 +4,7 @@ import SwiftData
 // MARK: - Timed Word
 // Matches the web's timed_text.json schema: { i, t0, t1, w }
 
-struct TimedWord: Codable, Hashable, Identifiable {
+struct TimedWord: Codable, Hashable, Identifiable, Sendable {
     var id: Int { i }
     let i: Int          // word index in chapter
     let t0: Double      // start time (seconds)
@@ -14,7 +14,7 @@ struct TimedWord: Codable, Hashable, Identifiable {
 
 // MARK: - Timed Phrase (paragraph grouping)
 
-struct TimedPhrase: Codable, Hashable, Identifiable {
+struct TimedPhrase: Codable, Hashable, Identifiable, Sendable {
     var id: Int { start }
     let start: Int      // first word index
     let end: Int        // last word index
@@ -22,7 +22,7 @@ struct TimedPhrase: Codable, Hashable, Identifiable {
 
 // MARK: - Chapter Timings (full chapter sync data)
 
-struct ChapterTimings: Codable {
+struct ChapterTimings: Codable, Sendable {
     let words: [TimedWord]
     let paragraphs: [TimedPhrase]
     

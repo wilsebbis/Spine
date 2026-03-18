@@ -472,6 +472,11 @@ struct ReaderView: View {
         let isUnlocked = unit.isCompleted || unit.ordinal <= firstUnreadOrdinal
         let isCurrentFrontier = unit.ordinal == firstUnreadOrdinal
         
+        let profile = ensureXPProfile()
+        profile.resetDailyPassesIfNeeded()
+        let canReadFrontier = EconomyService.shared.canReadNextUnit(profile: profile, unitsCompletedToday: profile.unitsReadToday)
+        let isPaywalled = isCurrentFrontier && !canReadFrontier && !unit.isCompleted
+        
         VStack(alignment: .leading, spacing: SpineTokens.Spacing.sm) {
             // Unit header
             unitHeader(for: unit)
@@ -479,17 +484,21 @@ struct ReaderView: View {
             // Reading content — dimmed if locked (lightweight, no blur)
             ZStack {
                 unitContent(for: unit)
-                    .opacity(isUnlocked ? 1 : 0.06)
+                    .opacity(isUnlocked && !isPaywalled ? 1 : 0.06)
                     .animation(.easeInOut(duration: 0.4), value: isUnlocked)
                 
                 // Lock overlay for dimmed units
-                if !isUnlocked {
-                    lockOverlay(unit: unit)
+                if !isUnlocked || isPaywalled {
+                    if isPaywalled {
+                        waitToReadOverlay(unit: unit, profile: profile)
+                    } else {
+                        lockOverlay(unit: unit)
+                    }
                 }
             }
             
             // Mark as Read button (only for the frontier unit)
-            if isCurrentFrontier && !unit.isCompleted {
+            if isCurrentFrontier && !unit.isCompleted && !isPaywalled {
                 markAsReadButton(for: unit)
             } else if unit.isCompleted {
                 completedBadge(for: unit)
@@ -615,6 +624,60 @@ struct ReaderView: View {
         }
         .frame(maxWidth: .infinity)
         .allowsHitTesting(false)
+    }
+    
+    // MARK: - Wait-Until-Free Overlay
+    
+    private func waitToReadOverlay(unit: ReadingUnit, profile: XPProfile) -> some View {
+        VStack(spacing: SpineTokens.Spacing.md) {
+            Spacer()
+            
+            Image(systemName: "clock.fill")
+                .font(.system(size: 28))
+                .foregroundStyle(SpineTokens.Colors.accentGold)
+            
+            Text("Daily Limit Reached")
+                .font(SpineTokens.Typography.headline)
+                .foregroundStyle(textColor)
+            
+            Text("You've completed your daily reading unit. Come back tomorrow for the next chapter, or use your Pages to read ahead now.")
+                .font(SpineTokens.Typography.caption)
+                .foregroundStyle(secondaryTextColor)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            
+            Button {
+                if EconomyService.shared.buyDailyPass(profile: profile) {
+                    try? modelContext.save()
+                    // The view will re-evaluate and remove the overlay automatically
+                } else {
+                    // Not enough pages - could show a toast or navigation to storefront here
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "book.pages.fill")
+                    Text("Unlock for \(EconomyService.shared.dailyPassCost) Pages")
+                        .font(SpineTokens.Typography.button)
+                }
+                .padding(.vertical, 12)
+                .padding(.horizontal, 24)
+                .background(profile.pages >= EconomyService.shared.dailyPassCost ? SpineTokens.Colors.accentGold : SpineTokens.Colors.subtleGray)
+                .foregroundStyle(.white)
+                .clipShape(Capsule())
+            }
+            .disabled(profile.pages < EconomyService.shared.dailyPassCost)
+            
+            if profile.pages < EconomyService.shared.dailyPassCost {
+                Text("Not enough Pages. You have \(profile.pages).")
+                    .font(SpineTokens.Typography.caption2)
+                    .foregroundStyle(SpineTokens.Colors.softRed)
+            }
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .background(backgroundColor.opacity(0.85)) // Add a slight backdrop to make it readable
+        // Do not allowHitTesting(false) here because we need the button to be interactive!
     }
     
     // MARK: - Mark as Read Button

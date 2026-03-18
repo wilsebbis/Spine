@@ -33,8 +33,19 @@ final class ReadingProgress {
     var longestStreak: Int
     
     var isFinished: Bool {
-        completedPercent >= 1.0
+        completedPercent >= 1.0 || finishedAt != nil
     }
+    
+    // MARK: - Reading Diary
+    
+    /// When the book was officially marked as finished.
+    var finishedAt: Date?
+    
+    /// User star rating (1-5).
+    var rating: Int?
+    
+    /// User review / diary entry.
+    var reviewText: String?
     
     init(book: Book? = nil) {
         self.id = UUID()
@@ -51,5 +62,9 @@ final class ReadingProgress {
         completedPercent = totalUnits > 0 ? Double(completedUnitCount) / Double(totalUnits) : 0.0
         currentUnitId = nextUnitId
         lastReadAt = Date()
+        
+        if completedPercent >= 1.0 && finishedAt == nil {
+            finishedAt = Date()
+        }
     }
 }
